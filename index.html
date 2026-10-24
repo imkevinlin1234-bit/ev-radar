@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0E1116">
+<title>充電站雷達</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="充電站雷達">
+<link rel="stylesheet" href="./vendor/leaflet.css">
+<style>
+/* 版面：全螢幕地圖＋上方篩選列＋下方可拉高的清單／詳細面板 */
+:root {
+  --bg: #F4F5F9; --surface: #FFFFFF; --surface-2: #EEF0F5; --ink: #0E1116; --ink-2: #3B4252; --ink-3: #687083;
+  --line: #E1E4EC; --accent: #2B54FF; --accent-soft: #E6ECFF; --on-accent: #FFFFFF;
+  --ok: #087F50; --ok-soft: #DDF5E9; --warn: #B45A00; --warn-soft: #FFF1DE; --bad: #C8102E; --bad-soft: #FDE4E8;
+  /* 充電站分類色（地圖、清單、圖例共用） */
+  --c-tesla: #E31937; --c-ultra: #7C3AED; --c-fast: #EA580C; --c-slow: #16A34A; --c-unk: #6B7280;
+  --shadow: 0 1px 2px rgba(14,17,22,.06), 0 8px 24px rgba(14,17,22,.14);
+  --font: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --num: "SF Pro Rounded", ui-rounded, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0D1016; --surface: #171B23; --surface-2: #222833; --ink: #F1F3F8; --ink-2: #C3C8D4; --ink-3: #8D94A5;
+  --line: #2A303C; --accent: #6F8BFF; --accent-soft: #1E2A55; --on-accent: #0D1016;
+  --ok: #4CD39A; --ok-soft: #123326; --warn: #FFB25C; --warn-soft: #3A2810; --bad: #FF6B81; --bad-soft: #3A1520;
+  --c-tesla: #FF3B55; --c-ultra: #A78BFA; --c-fast: #FB923C; --c-slow: #4ADE80; --c-unk: #9CA3AF; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0D1016; --surface: #171B23; --surface-2: #222833; --ink: #F1F3F8; --ink-2: #C3C8D4; --ink-3: #8D94A5;
+  --line: #2A303C; --accent: #6F8BFF; --accent-soft: #1E2A55; --on-accent: #0D1016;
+  --ok: #4CD39A; --ok-soft: #123326; --warn: #FFB25C; --warn-soft: #3A2810; --bad: #FF6B81; --bad-soft: #3A1520;
+  --c-tesla: #FF3B55; --c-ultra: #A78BFA; --c-fast: #FB923C; --c-slow: #4ADE80; --c-unk: #9CA3AF; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { height: 100%; margin: 0; overflow: hidden }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font); -webkit-text-size-adjust: 100% }
+button { font: inherit; color: inherit; cursor: pointer }
+.n { font-family: var(--num); font-variant-numeric: tabular-nums }
+#map { position: fixed; inset: 0; background: var(--surface-2) }
+.leaflet-container { font: inherit; background: var(--surface-2) }
+/* 深色模式：把 OSM 底圖反轉成深色，道路與文字仍看得清楚 */
+.darkmap .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9) saturate(.6) }
+.leaflet-control-attribution { font-size: 10px; background: color-mix(in srgb, var(--surface) 80%, transparent) !important; color: var(--ink-3) }
+.leaflet-control-attribution a { color: var(--ink-2) }
+
+/* 上方：狀態列＋分類篩選 */
+.top { position: fixed; z-index: 900; left: 0; right: 0; top: 0; pointer-events: none;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 8px }
+.row { display: flex; gap: 8px; align-items: center }
+.pill { pointer-events: auto; background: var(--surface); border: 0; border-radius: 999px; padding: 7px 12px; box-shadow: var(--shadow);
+  font-size: 13px; font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; min-height: 36px }
+.status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start }
+.status .live { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none }
+.status.on .live { background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 1.8s infinite }
+.status span.t { overflow: hidden; text-overflow: ellipsis }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent) } 70% { box-shadow: 0 0 0 8px transparent } 100% { box-shadow: 0 0 0 0 transparent } }
+.iconbtn { width: 38px; height: 38px; padding: 0; justify-content: center; font-size: 17px; flex: none }
+.chips { pointer-events: auto; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin: 0 -12px; padding-inline: 12px }
+.chips::-webkit-scrollbar { display: none }
+.chip { flex: none; border: 1.5px solid transparent; background: var(--surface); box-shadow: var(--shadow); border-radius: 999px; padding: 6px 11px;
+  font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; color: var(--ink-2) }
+.chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); display: inline-block }
+.chip .cnt { color: var(--ink-3); font-weight: 600 }
+.chip[aria-pressed="false"] { opacity: .5; box-shadow: none; background: color-mix(in srgb, var(--surface) 75%, transparent) }
+.chip[aria-pressed="false"] i { background: transparent; box-shadow: inset 0 0 0 2px var(--c) }
+.here { pointer-events: auto; align-self: center; background: var(--ink); color: var(--bg); border: 0; border-radius: 999px; padding: 8px 16px;
+  font-weight: 700; font-size: 13px; box-shadow: var(--shadow) }
+
+/* 右側：定位按鈕 */
+.fab { position: fixed; z-index: 900; right: max(12px, env(safe-area-inset-right, 0px)); width: 46px; height: 46px; border-radius: 50%; border: 0;
+  background: var(--surface); box-shadow: var(--shadow); display: grid; place-items: center; font-size: 19px; transition: bottom .25s }
+.fab.follow { background: var(--accent); color: var(--on-accent) }
+
+/* 下方面板 */
+.sheet { position: fixed; z-index: 950; left: 0; right: 0; bottom: 0; background: var(--bg); border-radius: 18px 18px 0 0;
+  box-shadow: 0 -6px 28px rgba(14,17,22,.18); display: flex; flex-direction: column; height: var(--h, 40vh); max-height: calc(100% - 64px);
+  transition: height .25s ease; padding-bottom: env(safe-area-inset-bottom, 0px) }
+.sheet.drag { transition: none }
+@media (min-width: 860px) { .sheet { left: max(12px, env(safe-area-inset-left, 0px)); right: auto; width: 400px; bottom: 12px; top: 112px; height: auto !important;
+  max-height: none; border-radius: 18px } .grab { display: none } .fab { bottom: 24px !important } }
+.grab { flex: none; padding: 8px 0 4px; display: grid; place-items: center; touch-action: none; cursor: grab }
+.grab::before { content: ""; width: 40px; height: 5px; border-radius: 3px; background: var(--line) }
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 16px 20px; overscroll-behavior: contain }
+.sec { font-size: 12px; font-weight: 800; color: var(--ink-3); letter-spacing: .04em; margin: 12px 2px 6px; display: flex; justify-content: space-between; gap: 8px }
+.sec select { font: inherit; font-weight: 700; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px 6px }
+
+/* 最近一站的大卡 */
+.hero { background: var(--surface); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+  border-left: 6px solid var(--c); cursor: pointer }
+.hero .k { font-size: 12px; font-weight: 800; color: var(--c) }
+.hero .nm { font-weight: 800; font-size: 17px; line-height: 1.3 }
+.hero .dist { grid-row: 1 / span 3; grid-column: 2; text-align: right; align-self: center }
+.hero .dist b { font-size: 30px; line-height: 1; display: block }
+.hero .meta { color: var(--ink-3); font-size: 13px }
+.arrow { display: inline-block; transition: transform .4s ease; color: var(--ink-2) }
+
+/* 清單 */
+.list { display: flex; flex-direction: column; gap: 8px }
+.item { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; background: var(--surface); border-radius: 14px; padding: 10px 12px;
+  border: 0; text-align: left; width: 100%; box-shadow: 0 1px 2px rgba(14,17,22,.05) }
+.item.dim { opacity: .55 }
+.badge { width: 40px; height: 40px; border-radius: 12px; background: var(--c); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 13px; line-height: 1;
+  font-family: var(--num); text-align: center }
+.badge small { display: block; font-size: 9px; font-weight: 700; opacity: .9; margin-top: 1px }
+.badge.hollow { background: transparent; color: var(--c); box-shadow: inset 0 0 0 2px var(--c) }
+.item .nm { font-weight: 700; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical }
+.item .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.item .r { text-align: right; font-size: 12px; color: var(--ink-3) }
+.item .r b { font-size: 16px; color: var(--ink); display: block }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--ink-2); margin-right: 4px }
+.tag.ok { background: var(--ok-soft); color: var(--ok) } .tag.warn { background: var(--warn-soft); color: var(--warn) } .tag.bad { background: var(--bad-soft); color: var(--bad) }
+.empty { text-align: center; color: var(--ink-3); padding: 24px 8px }
+.note { font-size: 12px; color: var(--ink-3); margin: 14px 2px 0; line-height: 1.6 }
+.note a { color: var(--accent) }
+
+/* 詳細 */
+.dhead { border-radius: 16px; padding: 14px; background: var(--c); color: #fff; position: relative }
+.dhead .k { font-size: 12px; font-weight: 800; opacity: .92 }
+.dhead h2 { margin: 2px 40px 4px 0; font-size: 19px; line-height: 1.3 }
+.dhead .addr { font-size: 13px; opacity: .92 }
+.dhead .x { position: absolute; right: 10px; top: 10px; width: 32px; height: 32px; border-radius: 50%; border: 0; background: rgba(255,255,255,.22); color: #fff; font-size: 16px }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px }
+.stat { background: var(--surface); border-radius: 12px; padding: 10px; text-align: center }
+.stat b { display: block; font-size: 20px; line-height: 1.15 }
+.stat span { font-size: 11.5px; color: var(--ink-3); font-weight: 700 }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px }
+.btn { border: 0; border-radius: 12px; padding: 11px 10px; font-weight: 800; background: var(--surface); text-align: center; text-decoration: none; color: var(--ink);
+  display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px }
+.btn.primary { background: var(--accent); color: var(--on-accent); grid-column: 1 / -1 }
+.card { background: var(--surface); border-radius: 14px; padding: 4px 14px; margin-top: 10px }
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px }
+.kv:last-child { border-bottom: 0 }
+.kv > span:first-child { color: var(--ink-3); font-weight: 700; font-size: 13px }
+.kv a { color: var(--accent); word-break: break-all }
+.conn { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line) }
+.conn:last-child { border-bottom: 0 }
+.conn .ty { font-weight: 700 }
+.conn .ty small { display: block; color: var(--ink-3); font-weight: 600; font-size: 12px }
+.conn .kw { font-weight: 800; color: var(--c) }
+.conn .q { color: var(--ink-3); font-weight: 700; min-width: 34px; text-align: right }
+
+/* 設定 */
+.panel { background: var(--surface); border-radius: 14px; padding: 12px 14px; margin-top: 10px }
+.panel h3 { margin: 0 0 8px; font-size: 14px }
+.seg { display: flex; flex-wrap: wrap; gap: 6px }
+.seg button { border: 1.5px solid var(--line); background: var(--bg); border-radius: 999px; padding: 6px 11px; font-size: 13px; font-weight: 700; color: var(--ink-2) }
+.seg button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent) }
+.panel input[type=text] { width: 100%; font: inherit; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink) }
+.panel p { margin: 6px 0 0; font-size: 12.5px; color: var(--ink-3) }
+
+/* 地圖上的標記 */
+.pin { width: 34px; height: 34px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font: 800 11px/1 var(--num);
+  border: 2.5px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); transition: transform .2s }
+.pin.t { border-radius: 10px }
+.pin.hollow { background: #fff; color: var(--c); border-color: var(--c); border-style: dashed }
+.pin.dim { opacity: .45 }
+.pin.sel { transform: scale(1.3); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 40%, transparent), 0 2px 8px rgba(0,0,0,.4) }
+.me { width: 22px; height: 22px; position: relative }
+.me .dot { position: absolute; inset: 3px; border-radius: 50%; background: #2B7CFF; border: 3px solid #fff; box-shadow: 0 0 0 0 rgba(43,124,255,.6); animation: mepulse 2s infinite }
+.me .cone { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-origin: 0 0; display: none }
+.me .cone::before { content: ""; position: absolute; left: -14px; top: -40px; border-left: 14px solid transparent; border-right: 14px solid transparent; border-bottom: 34px solid rgba(43,124,255,.35) }
+@keyframes mepulse { 0% { box-shadow: 0 0 0 0 rgba(43,124,255,.55) } 70% { box-shadow: 0 0 0 14px rgba(43,124,255,0) } 100% { box-shadow: 0 0 0 0 rgba(43,124,255,0) } }
+.toast { position: fixed; z-index: 1000; left: 50%; transform: translateX(-50%); top: calc(110px + env(safe-area-inset-top, 0px)); background: var(--ink); color: var(--bg);
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 700; max-width: calc(100% - 32px); box-shadow: var(--shadow) }
+.spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: sp .8s linear infinite; flex: none }
+@keyframes sp { to { transform: rotate(360deg) } }
+</style>
+</head>
+<body>
+<div id="map" aria-label="充電站地圖"></div>
+
+<div class="top">
+  <div class="row">
+    <div class="pill status" id="status"><i class="live"></i><span class="t" id="statusText">準備定位…</span></div>
+    <button class="pill iconbtn" id="btnRefresh" title="重新搜尋" aria-label="重新搜尋">⟳</button>
+    <button class="pill iconbtn" id="btnSettings" title="設定與篩選" aria-label="設定與篩選">⚙︎</button>
+  </div>
+  <div class="chips" id="chips"></div>
+  <button class="here" id="btnHere" hidden>搜尋這一區</button>
+</div>
+
+<button class="fab" id="btnLocate" title="回到我的位置" aria-label="回到我的位置">◎</button>
+
+<section class="sheet" id="sheet">
+  <div class="grab" id="grab"></div>
+  <div class="scroll" id="scroll">
+    <div id="viewList"></div>
+    <div id="viewDetail" hidden></div>
+    <div id="viewSettings" hidden></div>
+  </div>
+</section>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="./vendor/leaflet.js"></script>
+<script>
+"use strict";
+/* ============ 設定與狀態 ============ */
+const CATS = {
+  tesla: { label: "特斯拉超充", short: "超充", v: "--c-tesla" },
+  ultra: { label: "超快充 ≥150kW", short: "超快充", v: "--c-ultra" },
+  fast:  { label: "快充 DC", short: "快充", v: "--c-fast" },
+  slow:  { label: "慢充 AC", short: "慢充", v: "--c-slow" },
+  unk:   { label: "規格不明", short: "不明", v: "--c-unk" },
+};
+const CONN = {  // 接頭名稱（OSM socket:* 與特斯拉資料的 plugs 共用）
+  type2_combo: ["CCS2", "直流"], ccs2: ["CCS2", "直流"], type1_combo: ["CCS1", "直流"], ccs1: ["CCS1", "直流"],
+  chademo: ["CHAdeMO", "直流"], tesla_supercharger: ["特斯拉超充接頭", "直流"], tpc: ["TPC 特斯拉專用", "直流"],
+  nacs: ["NACS", "直流"], gb_dc: ["GB/T", "直流"], gbt: ["GB/T", "直流"], tesla_supercharger_ccs: ["CCS2", "直流"],
+  type2: ["Type 2", "交流"], type2_cable: ["Type 2（附線）", "交流"], type1: ["J1772 Type 1", "交流"],
+  tesla_destination: ["特斯拉目的地充電", "交流"], gb_ac: ["GB/T", "交流"], schuko: ["家用插座", "交流"], type3c: ["Type 3C", "交流"],
+  multi: ["多接頭（同一樁 TPC／CCS2 等）", "直流"], other: ["其他／未分類接頭", "直流"],
+};
+const DC_KEYS = new Set(["other", "type2_combo", "ccs2", "type1_combo", "ccs1", "chademo", "tesla_supercharger", "tpc", "nacs", "gb_dc", "gbt", "tesla_supercharger_ccs", "multi"]);
+const CONN_FILTERS = [["ccs2", "CCS2"], ["tpc", "TPC／NACS"], ["ccs1", "CCS1"], ["chademo", "CHAdeMO"], ["type2", "Type 2"], ["type1", "J1772"]];
+const CONN_GROUP = { type2_combo: "ccs2", ccs2: "ccs2", tesla_supercharger_ccs: "ccs2", tpc: "tpc", nacs: "tpc", tesla_supercharger: "tpc",
+  type1_combo: "ccs1", ccs1: "ccs1", chademo: "chademo", type2: "type2", type2_cable: "type2", tesla_destination: "type2", type1: "type1" };
+const STATUS_TW = { OPEN: ["營運中", "ok"], CONSTRUCTION: ["建置中", "warn"], PERMIT: ["申請許可中", "warn"], PLAN: ["規劃中", "warn"],
+  VOTING: ["社群提案", "warn"], CLOSED_TEMP: ["暫停營業", "bad"], EXPANDING: ["擴建中", "ok"], CLOSED_PERM: ["已關閉", "bad"] };
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ev." + k); return v == null ? d : JSON.parse(v) } catch { return d } },
+  set(k, v) { try { localStorage.setItem("ev." + k, JSON.stringify(v)) } catch {} },
+};
+const S = {
+  me: null, heading: null, acc: null, origin: null, radius: store.get("radius", 10),
+  cats: new Set(store.get("cats", Object.keys(CATS))), conns: new Set(store.get("conns", [])),
+  car: store.get("car", "any"), showPlanned: store.get("planned", false), ocmKey: store.get("ocmKey", ""),
+  stations: [], selected: null, follow: true, loading: false, view: "list", sort: "dist",
+  drive: new Map(), lastSearchAt: 0, lastTableAt: 0, lastTableFrom: null, route: null, routeFrom: null,
+};
+const $ = (id) => document.getElementById(id);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ============ 工具 ============ */
+function hav(a, b) {
+  const R = 6371e3, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function bearing(a, b) {
+  const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+const fmtDist = (m) => m < 1000 ? `${Math.round(m / 10) * 10} m` : m < 10000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`;
+const fmtMin = (s) => s < 3600 ? `${Math.max(1, Math.round(s / 60))} 分` : `${Math.floor(s / 3600)} 小時 ${Math.round((s % 3600) / 60)} 分`;
+const dirName = (b) => ["北", "東北", "東", "東南", "南", "西南", "西", "西北"][Math.round(b / 45) % 8];
+function parseKW(v) {
+  if (v == null) return null;
+  let best = null;
+  for (const part of String(v).split(/[;,/]/)) {
+    const m = part.match(/([\d.]+)\s*(kw|w|kva)?/i); if (!m) continue;
+    let n = parseFloat(m[1]); if (!isFinite(n)) continue;
+    if (m[2] && m[2].toLowerCase() === "w") n /= 1000; else if (!m[2] && n > 1000) n /= 1000;
+    if (n > 0 && n < 1500) best = Math.max(best ?? 0, n);
+  }
+  return best;
+}
+const kwTxt = (k) => k == null ? "—" : k >= 100 ? String(Math.round(k)) : String(Math.round(k * 10) / 10);
+let toastT;
+function toast(msg, ms = 2800) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms) }
+async function fetchJSON(url, opt = {}, ms = 30000) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
+  try { const r = await fetch(url, { ...opt, signal: ac.signal }); if (!r.ok) throw new Error("HTTP " + r.status); return await r.json() }
+  finally { clearTimeout(t) }
+}
+
+/* ============ 資料來源 ============ */
+// 1) 特斯拉超充：supercharge.info 全球站點（每天更新一次，存在手機裡）
+async function loadTesla() {
+  const cached = store.get("tesla", null);
+  if (cached && Date.now() - cached.t < 24 * 3600e3) return cached.d;
+  try {
+    const raw = await fetchJSON("https://supercharge.info/service/supercharge/allSites", {}, 60000);
+    const d = raw.filter((s) => s.gps && s.status !== "CLOSED_PERM").map((s) => [
+      s.id, s.name, s.status, +s.gps.latitude.toFixed(5), +s.gps.longitude.toFixed(5), s.stallCount || 0, s.powerKilowatt || 0, s.otherEVs ? 1 : 0,
+      s.plugs || null, s.stalls || null, s.facilityName || "", s.hours || "", s.accessNotes || "", s.addressNotes || "",
+      [s.address?.street, s.address?.city, s.address?.state, s.address?.country].filter(Boolean).join(", "), s.dateOpened || "",
+      s.solarCanopy ? 1 : 0, s.battery ? 1 : 0, s.plugshareId || 0, s.osmId || 0, s.locationId || "", s.elevationMeters ?? null, s.facilityHours || "",
+    ]);
+    store.set("tesla", { t: Date.now(), d });
+    return d;
+  } catch (e) { console.warn("tesla", e); return cached ? cached.d : [] }
+}
+function teslaToStation(a) {
+  const [id, name, status, lat, lng, stalls, kw, other, plugs, stallTypes, facility, hours, accessNotes, addressNotes, addr, opened, solar, battery, psId, osmId, locId, elev, facHours] = a;
+  const conns = [];
+  if (plugs) for (const [k, n] of Object.entries(plugs)) if (n > 0) conns.push({ key: k, n, kw: k === "type2" ? 22 : kw });
+  if (!conns.length && stalls) conns.push({ key: "tpc", n: stalls, kw });
+  return {
+    id: "T" + id, src: "tesla", tesla: true, cat: "tesla", lat, lng, name: name.replace(/, Taiwan/, ""), status, stalls, kw, otherEVs: !!other,
+    conns, stallTypes, facility, hours, accessNotes, addressNotes, addr, opened, solar, battery, psId, osmId, locId, elev, facHours,
+    planned: status !== "OPEN" && status !== "EXPANDING",
+  };
+}
+
+// 2) OpenStreetMap：全部公共充電站（Overpass，免金鑰）
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+// 公用 Overpass 伺服器偶爾塞車：幾台同時查，誰先回就用誰；全部失敗時用上次查到的結果
+async function loadOSM(c, radius) {
+  const q = `[out:json][timeout:25];nwr["amenity"="charging_station"](around:${Math.round(radius * 1000)},${c.lat.toFixed(4)},${c.lng.toFixed(4)});out center tags;`;
+  const acs = OVERPASS.map(() => new AbortController());
+  const one = async (u, i) => {
+    const t = setTimeout(() => acs[i].abort(), 30000);
+    try {
+      const r = await fetch(u + "?data=" + encodeURIComponent(q), { signal: acs[i].signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json(); if (!Array.isArray(j.elements)) throw new Error("格式不符"); return j.elements;
+    } finally { clearTimeout(t) }
+  };
+  try {
+    const el = await Promise.any(OVERPASS.map(one));
+    acs.forEach((a) => a.abort());
+    store.set("osmLast", { c, r: radius, t: Date.now(), el });
+    return { el };
+  } catch (e) {
+    const last = store.get("osmLast", null);
+    if (last && hav(last.c, c) < last.r * 1000) return { el: last.el, stale: last.t };
+    throw new Error("OpenStreetMap 伺服器忙碌");
+  }
+}
+const SCOOTER = /gogoro|ionex|光陽|kymco|pbgn|中華電動|emoving|yamaha|宏佳騰|aeon|換電|手機|行動電源|phone|usb|機車|自行車|腳踏車|scooter|e-?bike/i;
+const FAST_NAME = /快充|超充|特急|\bfast\b|\bdc\b|u-?power|evoasis|ionna/i;  // 站名或營運商看得出是直流快充
+function osmToStation(e) {
+  const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
+  if (lat == null) return null;
+  const who = [t.brand, t.operator, t.network, t.name].filter(Boolean).join(" ");
+  const carYes = t.motorcar === "yes" || t.motorcar === "designated";
+  if (!carYes && (t.charging === "battery_swap" || SCOOTER.test(who) || t.motorcar === "no")) return null;
+  const conns = [];
+  for (const [k, v] of Object.entries(t)) {
+    const m = k.match(/^socket:([a-z0-9_]+)$/); if (!m || v === "no" || v === "0") continue;
+    const key = m[1]; const n = parseInt(v, 10);
+    conns.push({ key, n: isFinite(n) ? n : null, kw: parseKW(t[`socket:${key}:output`]), amps: t[`socket:${key}:current`], volts: t[`socket:${key}:voltage`] });
+  }
+  if (!carYes && !conns.length && (t.bicycle === "yes" || t.scooter === "yes" || t.motorcycle === "yes" || t.motorcycle === "designated")) return null;
+  const isTesla = /tesla|特斯拉/i.test(who);
+  const hasSC = conns.some((c) => c.key === "tesla_supercharger" || c.key === "tesla_supercharger_ccs") || /supercharger|超級充電/i.test(who);
+  const dc = conns.some((c) => DC_KEYS.has(c.key)) || t["charging_station:type"] === "dc" || FAST_NAME.test(who + " " + (t.description || ""));
+  const kw = Math.max(0, ...conns.map((c) => c.kw || 0), parseKW(t["charging_station:output"]) || 0, parseKW(t.output) || 0) || null;
+  let cat;
+  if (isTesla && hasSC) cat = "tesla";
+  else if (kw != null && kw >= 150) cat = "ultra";
+  else if (dc || (kw != null && kw >= 40)) cat = "fast";
+  else if (conns.length || kw != null) cat = "slow";
+  else cat = "unk";
+  const addr = t["addr:full"] || [t["addr:city"], t["addr:district"], t["addr:street"], t["addr:housenumber"] && t["addr:housenumber"] + "號"].filter(Boolean).join("");
+  const cap = parseInt(t["capacity:motorcar"] || t.capacity, 10);
+  return {
+    id: "O" + e.type[0] + e.id, src: "osm", osmType: e.type, osmId: e.id, lat, lng, cat, tesla: isTesla, dest: isTesla && !hasSC,
+    name: t.name || t["name:zh"] || (isTesla && !hasSC ? "特斯拉目的地充電" : "") || t.brand || t.operator || t.network || "充電站", operator: t.operator, brand: t.brand, network: t.network,
+    conns, kw, stalls: isFinite(cap) ? cap : conns.reduce((s, c) => s + (c.n || 0), 0) || null, addr, tags: t,
+    status: t.disused === "yes" || t["disused:amenity"] ? "CLOSED_TEMP" : (t.construction ? "CONSTRUCTION" : "OPEN"),
+  };
+}
+
+// 3) Open Charge Map（選用；在設定貼上自己的免費金鑰才會用）
+async function loadOCM(c, radius) {
+  if (!S.ocmKey) return [];
+  const u = `https://api.openchargemap.io/v3/poi/?output=json&latitude=${c.lat}&longitude=${c.lng}&distance=${radius}&distanceunit=KM&maxresults=500&compact=false&verbose=false&key=${encodeURIComponent(S.ocmKey)}`;
+  const j = await fetchJSON(u, {}, 30000);
+  return j.map(ocmToStation).filter(Boolean);
+}
+function ocmKey(title = "", id) {
+  const s = title.toLowerCase();
+  if (s.includes("ccs") && (s.includes("type 2") || s.includes("2)"))) return "ccs2";
+  if (s.includes("ccs") || s.includes("combo")) return s.includes("type 1") || s.includes("j1772") ? "ccs1" : "ccs2";
+  if (s.includes("chademo")) return "chademo";
+  if (s.includes("nacs") || s.includes("supercharger") || s.includes("tesla")) return "tpc";
+  if (s.includes("type 2")) return "type2";
+  if (s.includes("j1772") || s.includes("type 1")) return "type1";
+  if (s.includes("gb-t") || s.includes("gb/t")) return s.includes("dc") ? "gb_dc" : "gb_ac";
+  return "ocm" + id;
+}
+function ocmToStation(p) {
+  const a = p.AddressInfo; if (!a) return null;
+  const conns = (p.Connections || []).map((c) => {
+    const key = ocmKey(c.ConnectionType?.Title, c.ConnectionTypeID);
+    if (!CONN[key]) CONN[key] = [c.ConnectionType?.Title || "其他接頭", c.CurrentType?.Title?.includes("DC") ? "直流" : "交流"];
+    return { key, n: c.Quantity || 1, kw: c.PowerKW || null, status: c.StatusType?.Title, dc: (c.CurrentType?.Title || "").includes("DC") || DC_KEYS.has(key) };
+  });
+  const kw = Math.max(0, ...conns.map((c) => c.kw || 0)) || null;
+  const op = p.OperatorInfo?.Title;
+  const isTesla = /tesla/i.test(op || "") || /supercharger/i.test(a.Title || "");
+  const dc = conns.some((c) => c.dc);
+  const cat = isTesla && dc ? "tesla" : kw >= 150 ? "ultra" : dc || kw >= 40 ? "fast" : conns.length ? "slow" : "unk";
+  const st = p.StatusType;
+  return {
+    id: "C" + p.ID, src: "ocm", ocmId: p.ID, lat: a.Latitude, lng: a.Longitude, cat, tesla: isTesla, dest: isTesla && !dc,
+    name: a.Title || op || "充電站", operator: op, conns, kw, stalls: p.NumberOfPoints || conns.reduce((s, c) => s + (c.n || 0), 0) || null,
+    addr: [a.AddressLine1, a.Town, a.StateOrProvince].filter(Boolean).join(", "), cost: p.UsageCost, usage: p.UsageType?.Title,
+    ocmStatus: st?.Title, status: st && st.IsOperational === false ? "CLOSED_TEMP" : "OPEN", updated: p.DateLastStatusUpdate || p.DateLastVerified,
+    phone: a.ContactTelephone1, url: a.RelatedURL, comments: a.AccessComments || p.GeneralComments,
+  };
+}
+
+/* ============ 搜尋 ============ */
+let teslaAll = null, searchSeq = 0;
+async function search(center, why) {
+  const seq = ++searchSeq;  // 新的搜尋蓋掉舊的
+  S.loading = true; S.origin = { lat: center.lat, lng: center.lng }; S.lastSearchAt = Date.now(); S.drive.clear(); S.lastTableAt = 0; S.osmFail = false;
+  $("btnHere").hidden = true;
+  const radius = S.radius, R = radius * 1000;
+  const osmP = loadOSM(center, radius), ocmP = loadOCM(center, radius);
+  osmP.catch(() => {}); ocmP.catch(() => {});
+  // 1) 特斯拉超充：資料在手機裡，先畫出來
+  if (!teslaAll) teslaAll = await loadTesla();
+  if (seq !== searchSeq) return;
+  const tesla = teslaAll.filter((a) => hav(center, { lat: a[3], lng: a[4] }) <= R * 1.6).map(teslaToStation);
+  S.stations = tesla.concat(S.stations.filter((s) => s.src !== "tesla")); render();  // 一般站先沿用上一次的，新的到了再換
+  // 2) 一般充電站：OpenStreetMap＋（選用）Open Charge Map
+  const [osm, ocm] = await Promise.allSettled([osmP, ocmP]);
+  if (seq !== searchSeq) return;
+  const out = tesla.slice();
+  const teslaOsmIds = new Set(tesla.map((t) => t.osmId).filter(Boolean));
+  const near = (s, list, m) => list.find((o) => o.cat === s.cat && hav(o, s) < m);
+  let staleMsg = null;
+  if (osm.status === "fulfilled") {
+    if (osm.value.stale) staleMsg = `OpenStreetMap 忙碌，先顯示 ${Math.round((Date.now() - osm.value.stale) / 60000)} 分鐘前存下的資料`;
+    for (const e of osm.value.el) {
+      const s = osmToStation(e); if (!s) continue;
+      if (teslaOsmIds.has(e.id)) { const t = tesla.find((x) => x.osmId === e.id); if (t) t.osmTags = s.tags; continue }
+      if (s.cat === "tesla") { const t = near(s, tesla, 250); if (t) { t.osmTags = s.tags; continue } }
+      out.push(s);
+    }
+  } else S.osmFail = true;
+  if (ocm.status === "fulfilled") {
+    for (const s of ocm.value) {
+      const dup = s.cat === "tesla" ? near(s, tesla, 250) : out.find((o) => o.src === "osm" && hav(o, s) < 60);
+      if (dup) { dup.ocm = s; if (dup.src === "osm" && s.conns.length) { dup.conns = s.conns; dup.kw = s.kw ?? dup.kw; dup.cat = s.cat } continue }
+      out.push(s);
+    }
+  } else if (S.ocmKey) toast("Open Charge Map 讀取失敗：" + ocm.reason?.message, 5000);
+  S.stations = out; S.loading = false;
+  if (S.osmFail) toast("OpenStreetMap 伺服器忙碌，先顯示特斯拉站；稍後按 ⟳ 再試", 5000);
+  else if (staleMsg) toast(staleMsg, 5000);
+  else if (why) toast(why);
+  if (S.selected) { const s = S.stations.find((x) => x.id === S.selected.id); if (s) S.selected = s }
+  render(); updateDriveTimes(true);
+}
+
+/* ============ 篩選與排序 ============ */
+const canUse = (s) => !(s.cat === "tesla" && s.src === "tesla" && S.car === "other" && !s.otherEVs);
+function visible() {
+  return S.stations.filter((s) => {
+    if (!S.cats.has(s.cat)) return false;
+    if (s.planned && !S.showPlanned) return false;
+    if (S.conns.size && !s.conns.some((c) => c.key === "multi" ? S.conns.has("tpc") || S.conns.has("ccs2") : S.conns.has(CONN_GROUP[c.key]))) return false;
+    return true;
+  });
+}
+function withDist(list) {
+  const me = S.me || S.origin;
+  return list.map((s) => ({ s, d: me ? hav(me, s) : 0, b: me ? bearing(me, s) : 0 }))
+    .filter((x) => x.d <= S.radius * 1000 * 1.05 || x.s.id === S.selected?.id);
+}
+function sorted(list) {
+  const arr = withDist(list);
+  if (S.sort === "kw") arr.sort((a, b) => (b.s.kw || 0) - (a.s.kw || 0) || a.d - b.d);
+  else if (S.sort === "drive") arr.sort((a, b) => (S.drive.get(a.s.id)?.t ?? 1e9 + a.d) - (S.drive.get(b.s.id)?.t ?? 1e9 + b.d));
+  else arr.sort((a, b) => (canUse(b.s) - canUse(a.s)) || (a.s.planned - b.s.planned) || a.d - b.d);
+  return arr;
+}
+
+/* ============ 地圖 ============ */
+const map = L.map("map", { zoomControl: false, attributionControl: true, tap: true }).setView([25.0339, 121.5645], 13);
+const dark = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+let tiles;
+function setTiles() {
+  if (tiles) map.removeLayer(tiles);
+  tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(map);
+  document.body.classList.toggle("darkmap", dark());
+}
+setTiles();
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { setTiles(); render() });
+const layer = L.layerGroup().addTo(map);
+let meMarker, accCircle, routeLine, radiusCircle;
+const markers = new Map();
+function pinHTML(s) {
+  const planned = s.planned, cls = ["pin", s.tesla ? "t" : "", planned ? "hollow" : "", canUse(s) ? "" : "dim", S.selected?.id === s.id ? "sel" : ""].join(" ");
+  const label = s.cat === "tesla" ? (s.stalls ? `T${s.stalls}` : "T") : s.dest ? "T·AC" : s.kw ? kwTxt(s.kw) : "?";
+  return `<div class="${cls}" style="--c:var(${CATS[s.cat].v})">${esc(label)}</div>`;
+}
+function drawMarkers(list) {
+  const keep = new Set();
+  for (const { s } of list.slice(0, 400)) {
+    keep.add(s.id);
+    const icon = L.divIcon({ html: pinHTML(s), className: "", iconSize: [34, 34], iconAnchor: [17, 17] });
+    let m = markers.get(s.id);
+    if (!m) { m = L.marker([s.lat, s.lng], { icon, riseOnHover: true }).on("click", () => select(s.id)); m.addTo(layer); markers.set(s.id, m) }
+    else m.setIcon(icon);
+    m.setZIndexOffset(S.selected?.id === s.id ? 2000 : s.cat === "tesla" ? 600 : s.cat === "ultra" ? 400 : s.cat === "fast" ? 200 : 0);
+  }
+  for (const [id, m] of markers) if (!keep.has(id)) { layer.removeLayer(m); markers.delete(id) }
+  if (S.origin) {
+    if (!radiusCircle) radiusCircle = L.circle([S.origin.lat, S.origin.lng], { radius: S.radius * 1000, color: css("--accent"), weight: 1, opacity: .35, fillOpacity: .03, interactive: false }).addTo(map);
+    else { radiusCircle.setLatLng([S.origin.lat, S.origin.lng]); radiusCircle.setRadius(S.radius * 1000) }
+  }
+}
+function drawMe() {
+  if (!S.me) return;
+  const ll = [S.me.lat, S.me.lng];
+  if (!meMarker) {
+    meMarker = L.marker(ll, { icon: L.divIcon({ html: '<div class="me"><div class="cone"></div><div class="dot"></div></div>', className: "", iconSize: [22, 22], iconAnchor: [11, 11] }), zIndexOffset: 3000, interactive: false }).addTo(map);
+    accCircle = L.circle(ll, { radius: S.acc || 30, color: "#2B7CFF", weight: 0, fillOpacity: .12, interactive: false }).addTo(map);
+  } else { meMarker.setLatLng(ll); accCircle.setLatLng(ll); accCircle.setRadius(S.acc || 30) }
+  const cone = meMarker.getElement()?.querySelector(".cone");
+  if (cone) { cone.style.display = S.heading == null ? "none" : "block"; if (S.heading != null) cone.style.transform = `rotate(${S.heading}deg)` }
+}
+
+/* ============ 畫面 ============ */
+function setStatus() {
+  const el = $("status"), t = $("statusText");
+  el.classList.toggle("on", !!S.me && !S.loading);
+  if (S.loading) { el.querySelector(".live").outerHTML = '<i class="live spin"></i>'; t.textContent = S.stations.length ? `特斯拉 ${withDist(S.stations).length} 站 · 搜尋其他充電站…` : `搜尋 ${S.radius} km 內的充電站…`; return }
+  el.querySelector(".live").className = "live";
+  const n = visible().length ? withDist(visible()).length : 0;
+  const where = S.me ? `即時定位${S.acc ? ` ±${Math.round(S.acc)}m` : ""}` : S.origin ? "地圖中心" : "尚未定位";
+  t.innerHTML = `${esc(where)} · <span class="n">${n}</span> 站 · <span class="n">${S.radius}</span> km`;
+}
+function renderChips() {
+  const counts = {}; for (const { s } of withDist(S.stations.filter((s) => !s.planned || S.showPlanned))) counts[s.cat] = (counts[s.cat] || 0) + 1;
+  $("chips").innerHTML = Object.entries(CATS).map(([k, c]) =>
+    `<button class="chip" data-cat="${k}" aria-pressed="${S.cats.has(k)}" style="--c:var(${c.v})"><i></i>${c.label}<span class="cnt n">${counts[k] || 0}</span></button>`).join("");
+}
+function badge(s) {
+  const lab = s.cat === "tesla" ? `T<small>${s.stalls ? s.stalls + " 樁" : "超充"}</small>` : s.dest ? "T<small>AC</small>" : s.kw ? `${kwTxt(s.kw)}<small>kW</small>` : "?";
+  return `<div class="badge${s.planned ? " hollow" : ""}" style="--c:var(${CATS[s.cat].v})">${lab}</div>`;
+}
+function tags(s) {
+  const out = [];
+  if (s.status && s.status !== "OPEN") { const [t, k] = STATUS_TW[s.status] || [s.status, "warn"]; out.push(`<span class="tag ${k}">${t}</span>`) }
+  if (s.src === "tesla") out.push(s.otherEVs ? '<span class="tag ok">非特斯拉可充</span>' : '<span class="tag">限特斯拉</span>');
+  if (s.ocmStatus && s.ocmStatus !== "Operational") out.push(`<span class="tag warn">${esc(s.ocmStatus)}</span>`);
+  return out.join("");
+}
+function connSummary(s) {
+  const seen = []; for (const c of s.conns) { const n = (CONN[c.key] || [c.key])[0]; if (!seen.includes(n)) seen.push(n) }
+  return seen.slice(0, 3).join("・");
+}
+const arrowHTML = (b) => `<span class="arrow" style="transform:rotate(${b}deg)">↑</span>`;
+function renderList() {
+  const list = sorted(visible());
+  const me = S.me || S.origin;
+  let h = "";
+  if (S.osmFail && !S.loading) h += `<p class="note" style="margin-top:4px">⚠︎ 一般充電站（OpenStreetMap）這次沒載入，目前只有特斯拉站。按上方 ⟳ 重試${S.ocmKey ? "" : "，或在 ⚙︎ 加入 Open Charge Map 金鑰當備援"}。</p>`;
+  if (S.loading && !S.stations.length) h += `<div class="empty"><span class="spin" style="display:inline-block;vertical-align:middle"></span> 正在搜尋附近 ${S.radius} km 的充電站…</div>`;
+  if (!S.origin && !S.loading) h += `<div class="empty">正在取得你的位置…<br><small>沒有跳出定位詢問的話，按右下 ◎；或拖曳地圖後按「搜尋這一區」</small></div>`;
+  else if (!list.length && !S.loading) h += `<div class="empty">${S.radius} km 內沒有符合條件的充電站<br><small>把範圍調大，或在 ⚙︎ 放寬篩選</small></div>`;
+  const first = list.find((x) => canUse(x.s) && !x.s.planned);
+  if (first) {
+    const s = first.s, dv = S.drive.get(s.id);
+    h += `<div class="sec"><span>離你最近</span></div>
+    <div class="hero" data-id="${s.id}" style="--c:var(${CATS[s.cat].v})">
+      <div class="k">${CATS[s.cat].label}${s.dest ? "（目的地充電）" : ""}</div>
+      <div class="dist"><b class="n">${fmtDist(first.d)}</b><span class="meta">${arrowHTML(first.b)} 往${dirName(first.b)}${dv ? `<br>開車 ${fmtMin(dv.t)}` : ""}</span></div>
+      <div class="nm">${esc(s.name)}</div>
+      <div class="meta">${s.kw ? `最高 <b class="n">${kwTxt(s.kw)}</b> kW · ` : ""}${s.stalls ? `<b class="n">${s.stalls}</b> 個充電位 · ` : ""}${esc(connSummary(s))}</div>
+    </div>`;
+  }
+  if (list.length) {
+    h += `<div class="sec"><span>附近 <span class="n">${list.length}</span> 站</span><select id="sortSel" aria-label="排序">
+      <option value="dist"${S.sort === "dist" ? " selected" : ""}>依直線距離</option><option value="drive"${S.sort === "drive" ? " selected" : ""}>依開車時間</option>
+      <option value="kw"${S.sort === "kw" ? " selected" : ""}>依充電功率</option></select></div><div class="list">`;
+    for (const { s, d, b } of list.slice(0, 120)) {
+      const dv = S.drive.get(s.id);
+      h += `<button class="item${canUse(s) ? "" : " dim"}" data-id="${s.id}">${badge(s)}
+        <div style="min-width:0"><div class="nm">${esc(s.name)}</div><div class="sub">${tags(s)}${esc([s.operator && s.operator !== s.name ? s.operator : "", connSummary(s)].filter(Boolean).join(" · "))}</div></div>
+        <div class="r"><b class="n">${fmtDist(d)}</b>${dv ? `🚗 ${fmtMin(dv.t)}` : `${arrowHTML(b)} ${dirName(b)}`}</div></button>`;
+    }
+    h += `</div>`;
+  }
+  h += `<p class="note">● 顏色：<b style="color:var(--c-tesla)">紅＝特斯拉超充</b>、<b style="color:var(--c-ultra)">紫＝超快充 150kW 以上</b>、<b style="color:var(--c-fast)">橘＝直流快充</b>、<b style="color:var(--c-slow)">綠＝交流慢充</b>、<b style="color:var(--c-unk)">灰＝規格不明</b>；方形＝特斯拉，虛線＝建置中。圖釘上的數字是最高功率（kW），特斯拉顯示充電樁數。<br>
+  資料：特斯拉超充來自 <a href="https://supercharge.info" target="_blank" rel="noopener">supercharge.info</a>（每日更新），其他充電站來自 <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>${S.ocmKey ? "、Open Charge Map" : ""}。目前沒有免費的即時空位資料，出發前請用營運商 App 確認。</p>`;
+  $("viewList").innerHTML = h;
+}
+function kv(k, v) { return v ? `<div class="kv"><span>${k}</span><span>${v}</span></div>` : "" }
+const link = (u, t) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>`;
+function renderDetail() {
+  const s = S.selected; if (!s) return;
+  const me = S.me || S.origin, d = me ? hav(me, s) : null, b = me ? bearing(me, s) : 0;
+  const route = S.route && S.route.id === s.id ? S.route : null, t = s.osmTags || s.tags || {};
+  let h = `<div class="dhead" style="--c:var(${CATS[s.cat].v})"><button class="x" id="btnClose" aria-label="關閉">✕</button>
+    <div class="k">${CATS[s.cat].label}${s.dest ? "（目的地充電，交流）" : ""}${s.planned ? " · " + (STATUS_TW[s.status]?.[0] || s.status) : ""}</div>
+    <h2>${esc(s.name)}</h2><div class="addr">${esc(s.facility ? s.facility + " · " : "")}${esc(s.addr || "")}</div></div>
+  <div class="stats">
+    <div class="stat"><b class="n">${d == null ? "—" : fmtDist(d)}</b><span>${d == null ? "直線距離" : arrowHTML(b) + " 往" + dirName(b)}</span></div>
+    <div class="stat"><b class="n">${route ? fmtMin(route.t) : "…"}</b><span>${route ? "開車 " + fmtDist(route.d) : "路線計算中"}</span></div>
+    <div class="stat"><b class="n">${s.kw ? kwTxt(s.kw) : "—"}</b><span>最高 kW</span></div>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving" target="_blank" rel="noopener">➤ Google 地圖導航</a>
+    <a class="btn" href="https://maps.apple.com/?daddr=${s.lat},${s.lng}&dirflg=d" target="_blank" rel="noopener">Apple 地圖</a>
+    <button class="btn" id="btnFit">看整條路線</button>
+  </div>`;
+  // 接頭
+  h += `<div class="sec"><span>接頭與功率</span><span>${s.stalls ? `共 <span class="n">${s.stalls}</span> 個充電位` : ""}</span></div><div class="card" style="--c:var(${CATS[s.cat].v})">`;
+  if (s.conns.length) for (const c of s.conns) {
+    const [nm, cur] = CONN[c.key] || [c.key, ""];
+    const extra = [cur, c.amps && c.amps + "A", c.volts && c.volts + "V", c.status].filter(Boolean).join(" · ");
+    h += `<div class="conn"><div class="ty">${esc(nm)}<small>${esc(extra)}</small></div><div class="kw n">${c.kw ? kwTxt(c.kw) + " kW" : "—"}</div><div class="q n">${c.n ? "×" + c.n : ""}</div></div>`;
+  } else h += `<div class="conn"><div class="ty">接頭資料未登錄<small>可到下方資料來源補資料</small></div><div></div><div></div></div>`;
+  h += `</div>`;
+  // 特斯拉專屬
+  if (s.src === "tesla") {
+    const st = s.stallTypes ? Object.entries(s.stallTypes).filter(([, n]) => n > 0).map(([k, n]) => `${{ v2: "V2（150kW）", v3: "V3（250kW）", v4: "V4（最高 500kW）", urban: "都會型（72kW）", accessible: "無障礙車位", trailerFriendly: "可拖車車位", other: "其他" }[k] || k} ×${n}`).join("<br>") : "";
+    h += `<div class="sec"><span>特斯拉超充資訊</span></div><div class="card">
+      ${kv("狀態", `<span class="tag ${STATUS_TW[s.status]?.[1] || ""}">${STATUS_TW[s.status]?.[0] || s.status}</span>`)}
+      ${kv("非特斯拉車", s.otherEVs ? '<span class="tag ok">開放（需 Tesla App）</span>' : "僅限特斯拉")}
+      ${kv("充電樁版本", st)}
+      ${kv("營業時間", esc(s.hours || t.opening_hours || "") || "24 小時（未另外標示）")}
+      ${kv("所在場所", esc([s.facility, s.facHours && "營業 " + s.facHours].filter(Boolean).join(" · ")))}
+      ${kv("位置說明", esc(s.addressNotes))}
+      ${kv("進場說明", esc(s.accessNotes))}
+      ${kv("開幕日期", esc(s.opened))}
+      ${kv("設施", [s.solar && "太陽能頂棚", s.battery && "儲能電池"].filter(Boolean).join("、"))}
+      ${kv("海拔", s.elev != null ? s.elev + " m" : "")}
+      ${kv("即時空位", "開放資料沒有提供；請看 Tesla App 或車上螢幕")}
+    </div>`;
+  }
+  // 一般資訊
+  const pay = Object.keys(t).filter((k) => /^payment:/.test(k) && t[k] === "yes").map((k) => ({ credit_cards: "信用卡", debit_cards: "金融卡", app: "App", contactless: "感應支付", cash: "現金", visa: "Visa", mastercard: "Mastercard", jcb: "JCB", apple_pay: "Apple Pay", google_pay: "Google Pay", line_pay: "LINE Pay", jkopay: "街口" }[k.slice(8)] || k.slice(8)));
+  const auth = Object.keys(t).filter((k) => /^authentication:/.test(k) && t[k] === "yes").map((k) => ({ app: "App", nfc: "NFC 卡", membership_card: "會員卡", none: "免認證", phone_call: "電話", short_message: "簡訊" }[k.slice(15)] || k.slice(15)));
+  const info = [
+    kv("營運商", esc([s.operator, s.network && s.network !== s.operator ? s.network : ""].filter(Boolean).join(" · "))),
+    s.src !== "tesla" ? kv("營業時間", esc(t.opening_hours === "24/7" ? "24 小時" : t.opening_hours || "")) : "",
+    kv("費用", esc([t.fee === "no" ? "免費" : t.fee === "yes" ? "收費" : "", t.charge, s.cost || s.ocm?.cost].filter(Boolean).join(" · "))),
+    kv("停車費", esc(t["parking:fee"] === "no" ? "免停車費" : t["parking:fee"] === "yes" ? "另收停車費" : t["parking:fee"] || "")),
+    kv("付款方式", esc(pay.join("、"))), kv("啟動方式", esc(auth.join("、"))),
+    kv("開放對象", esc({ yes: "公眾", public: "公眾", customers: "限顧客", private: "非公開", permissive: "開放使用" }[t.access] || s.usage || s.ocm?.usage || t.access || "")),
+    kv("停車位置", esc([t.covered === "yes" && "有遮蔽", t.level && "樓層 " + t.level, t.location === "underground" && "地下停車場"].filter(Boolean).join("、"))),
+    kv("說明", esc(t.description || s.comments || s.ocm?.comments || "")),
+    kv("電話", (t.phone || t["contact:phone"] || s.phone) ? `<a href="tel:${esc(t.phone || t["contact:phone"] || s.phone)}">${esc(t.phone || t["contact:phone"] || s.phone)}</a>` : ""),
+    kv("網站", (t.website || t["contact:website"] || s.url) ? link(t.website || t["contact:website"] || s.url, (t.website || t["contact:website"] || s.url).replace(/^https?:\/\//, "")) : ""),
+    kv("狀態回報", esc(s.ocmStatus || s.ocm?.ocmStatus ? `${s.ocmStatus || s.ocm.ocmStatus}${(s.updated || s.ocm?.updated) ? "（" + String(s.updated || s.ocm.updated).slice(0, 10) + "）" : ""}` : "")),
+    kv("資料核對", esc(t.check_date || t["check_date:opening_hours"] || "")),
+    kv("座標", `<span class="n">${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}</span>`),
+  ].join("");
+  h += `<div class="sec"><span>站點資訊</span></div><div class="card">${info}</div>`;
+  const src = [];
+  if (s.src === "tesla") { src.push(link(`https://supercharge.info/map?siteID=${s.id.slice(1)}`, "supercharge.info")); if (s.psId) src.push(link(`https://www.plugshare.com/location/${s.psId}`, "PlugShare（看評論）")) }
+  if (s.src === "osm") src.push(link(`https://www.openstreetmap.org/${s.osmType}/${s.osmId}`, "OpenStreetMap"));
+  if (s.osmId && s.src === "tesla") src.push(link(`https://www.openstreetmap.org/node/${s.osmId}`, "OpenStreetMap"));
+  if (s.ocmId || s.ocm) src.push(link(`https://map.openchargemap.io/?id=${s.ocmId || s.ocm.ocmId}`, "Open Charge Map"));
+  src.push(link(`https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`, "Google 地圖（街景、評論）"));
+  h += `<p class="note">資料來源與更多資訊：${src.join("、")}</p>`;
+  $("viewDetail").innerHTML = h;
+}
+function renderSettings() {
+  const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" aria-pressed="${String(cur) === String(v)}">${l}</button>`).join("")}</div>`;
+  $("viewSettings").innerHTML = `<div class="dhead" style="--c:var(--ink)"><button class="x" id="btnClose" aria-label="關閉">✕</button><div class="k">設定與篩選</div><h2>找哪一種充電站</h2></div>
+  <div class="panel"><h3>搜尋範圍</h3>${seg("radius", [[3, "3 km"], [10, "10 km"], [25, "25 km"], [50, "50 km"]], S.radius)}<p>移動超過範圍的三分之一會自動重新搜尋。</p></div>
+  <div class="panel"><h3>我的車</h3>${seg("car", [["any", "不限"], ["tesla", "特斯拉"], ["other", "其他品牌"]], S.car)}<p>選「其他品牌」時，只限特斯拉的超充站會變淡、排到後面。</p></div>
+  <div class="panel"><h3>接頭（不選＝全部）</h3><div class="seg" data-seg="conns">${CONN_FILTERS.map(([v, l]) => `<button data-v="${v}" aria-pressed="${S.conns.has(v)}">${l}</button>`).join("")}</div><p>台灣常見：特斯拉 TPC、CCS1（舊款）、CCS2、J1772；歐洲多為 CCS2、Type 2。</p></div>
+  <div class="panel"><h3>特斯拉建置中／規劃中的站</h3>${seg("planned", [[false, "不顯示"], [true, "顯示（虛線）"]], S.showPlanned)}</div>
+  <div class="panel"><h3>外觀</h3>${seg("theme", [["", "跟系統"], ["light", "淺色"], ["dark", "深色"]], document.documentElement.dataset.theme || "")}</div>
+  <div class="panel"><h3>更多充電站（選用）</h3><input type="text" id="ocmKey" placeholder="貼上 Open Charge Map API 金鑰" value="${esc(S.ocmKey)}" autocomplete="off" spellcheck="false">
+    <p>OpenStreetMap 在部分地區（例如台灣）登錄的汽車充電站不多。到 <a href="https://openchargemap.org/site/profile/applications" target="_blank" rel="noopener">openchargemap.org</a> 免費註冊取得金鑰貼在這裡，會多一個資料來源，並顯示費用與狀態回報。金鑰只存在這支手機。</p></div>`;
+}
+function render() {
+  setStatus(); renderChips();
+  const list = sorted(visible());
+  drawMarkers(list); drawMe();
+  $("viewList").hidden = S.view !== "list"; $("viewDetail").hidden = S.view !== "detail"; $("viewSettings").hidden = S.view !== "settings";
+  if (S.view === "list") renderList(); else if (S.view === "detail") renderDetail();
+}
+let rT; const renderSoon = () => { clearTimeout(rT); rT = setTimeout(render, 120) };
+
+/* ============ 選站與路線 ============ */
+function select(id) {
+  const s = S.stations.find((x) => x.id === id); if (!s) return;
+  S.selected = s; S.view = "detail"; S.follow = false; $("btnLocate").classList.remove("follow");
+  $("scroll").scrollTop = 0; setSheet("mid"); render();
+  map.panTo([s.lat, s.lng], { animate: true });
+  loadRoute(true);
+}
+function closeDetail() {
+  S.selected = null; S.view = "list"; S.route = null; if (routeLine) { map.removeLayer(routeLine); routeLine = null }
+  render();
+}
+async function loadRoute(fit) {
+  const s = S.selected, from = S.me || S.origin; if (!s || !from) return;
+  S.routeFrom = { ...from };
+  try {
+    const j = await fetchJSON(`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${s.lng},${s.lat}?overview=full&geometries=geojson`, {}, 20000);
+    const r = j.routes?.[0]; if (!r || S.selected?.id !== s.id) return;
+    S.route = { id: s.id, t: r.duration, d: r.distance };
+    S.drive.set(s.id, { t: r.duration, d: r.distance });
+    if (routeLine) map.removeLayer(routeLine);
+    routeLine = L.layerGroup([
+      L.polyline(r.geometry.coordinates.map(([x, y]) => [y, x]), { color: "#fff", weight: 9, opacity: .9, interactive: false }),
+      L.polyline(r.geometry.coordinates.map(([x, y]) => [y, x]), { color: css(CATS[s.cat].v) || "#2B54FF", weight: 5, opacity: 1, interactive: false }),
+    ]).addTo(map);
+    if (fit) fitRoute();
+    if (S.view === "detail") renderDetail();
+  } catch (e) { if (S.view === "detail") { S.route = null; toast("路線計算失敗，仍可直接按導航") } }
+}
+function fitRoute() {
+  const s = S.selected; if (!s) return;
+  const pts = [[s.lat, s.lng]]; if (S.me) pts.push([S.me.lat, S.me.lng]);
+  if (routeLine) routeLine.eachLayer((l) => pts.push(...l.getLatLngs()));
+  map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 130], paddingBottomRight: [40, sheetPx() + 30], maxZoom: 16 });
+}
+// 前 10 站的實際開車時間（OSRM table，一次查完）
+async function updateDriveTimes(force) {
+  const from = S.me || S.origin; if (!from) return;
+  if (!force && Date.now() - S.lastTableAt < 45000 && S.lastTableFrom && hav(S.lastTableFrom, from) < 400) return;
+  const top = withDist(visible()).sort((a, b) => a.d - b.d).slice(0, 10).map((x) => x.s);
+  if (!top.length) return;
+  S.lastTableAt = Date.now(); S.lastTableFrom = { ...from };
+  try {
+    const coords = [from, ...top].map((p) => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(";");
+    const j = await fetchJSON(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=duration,distance`, {}, 20000);
+    top.forEach((s, i) => { const t = j.durations?.[0]?.[i + 1], d = j.distances?.[0]?.[i + 1]; if (t != null) S.drive.set(s.id, { t, d }) });
+    if (S.view === "list") renderList();
+  } catch (e) { console.warn("table", e) }
+}
+
+/* ============ 即時定位 ============ */
+let watchId = null;
+function startGPS(user) {
+  if (!("geolocation" in navigator)) { noGPS("這個瀏覽器不支援定位"); return }
+  if (watchId != null) { if (user && S.me) { S.follow = true; $("btnLocate").classList.add("follow"); map.setView([S.me.lat, S.me.lng], Math.max(map.getZoom(), 14)) } return }
+  watchId = navigator.geolocation.watchPosition(onPos, (err) => {
+    navigator.geolocation.clearWatch(watchId); watchId = null;
+    noGPS(err.code === 1 ? "定位被拒絕：到瀏覽器設定允許位置，或拖曳地圖後按「搜尋這一區」" : "暫時拿不到位置，先用地圖中心搜尋");
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+}
+function noGPS(msg) {
+  toast(msg, 5000);
+  if (!S.origin) { const c = map.getCenter(); search({ lat: c.lat, lng: c.lng }) }
+  setStatus();
+}
+let lastRenderPos = null;
+function onPos(p) {
+  const first = !S.me;
+  S.me = { lat: p.coords.latitude, lng: p.coords.longitude }; S.acc = p.coords.accuracy;
+  if (p.coords.heading != null && !isNaN(p.coords.heading) && (p.coords.speed || 0) > 1) S.heading = p.coords.heading;
+  if (S.follow) map.setView([S.me.lat, S.me.lng], first ? 14 : map.getZoom(), { animate: !first });
+  drawMe();
+  const moved = S.origin ? hav(S.origin, S.me) : Infinity;
+  if (!(S.loading && Date.now() - S.lastSearchAt < 40000) && moved > Math.max(800, S.radius * 1000 / 3)) { search(S.me, first ? null : "你移動了，已更新附近充電站"); return }
+  // 位置每更新一次：清單距離、方向、排序跟著動（最多每秒一次）
+  if (!lastRenderPos || hav(lastRenderPos, S.me) > 8) { lastRenderPos = { ...S.me }; renderSoon() }
+  updateDriveTimes();
+  if (S.selected && S.routeFrom && hav(S.routeFrom, S.me) > 250) loadRoute(false);
+}
+// 每 5 分鐘自動重抓一次（App 在前景時）
+setInterval(() => { if (document.visibilityState === "visible" && S.origin && Date.now() - S.lastSearchAt > 300000) search(S.me || S.origin) }, 30000);
+
+/* ============ 下方面板拖曳 ============ */
+const SNAP = { low: 0.22, mid: 0.45, high: 0.86 };
+let sheetState = "mid";
+const sheetPx = () => innerWidth >= 860 ? 0 : $("sheet").getBoundingClientRect().height;
+function setSheet(k) {
+  sheetState = k; $("sheet").style.setProperty("--h", Math.round(innerHeight * SNAP[k]) + "px");
+  $("btnLocate").style.bottom = (innerWidth >= 860 ? 24 : Math.round(innerHeight * SNAP[k]) + 14) + "px";
+}
+(() => {
+  const g = $("grab"), sh = $("sheet"); let y0, h0;
+  g.addEventListener("pointerdown", (e) => { y0 = e.clientY; h0 = sh.getBoundingClientRect().height; sh.classList.add("drag"); g.setPointerCapture(e.pointerId) });
+  g.addEventListener("pointermove", (e) => { if (y0 == null) return; const h = Math.min(innerHeight - 64, Math.max(90, h0 + (y0 - e.clientY))); sh.style.setProperty("--h", h + "px") });
+  g.addEventListener("pointerup", (e) => {
+    if (y0 == null) return; sh.classList.remove("drag"); const r = sh.getBoundingClientRect().height / innerHeight, dy = y0 - e.clientY; y0 = null;
+    if (Math.abs(dy) < 6) { setSheet(sheetState === "low" ? "mid" : sheetState === "mid" ? "high" : "low"); return }
+    setSheet(Object.entries(SNAP).reduce((a, [k, v]) => Math.abs(v - r) < Math.abs(SNAP[a] - r) ? k : a, "mid"));
+  });
+})();
+addEventListener("resize", () => setSheet(sheetState));
+
+/* ============ 事件 ============ */
+$("chips").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cat]"); if (!b) return; const k = b.dataset.cat;
+  if (S.cats.has(k)) { if (S.cats.size === 1) { S.cats = new Set(Object.keys(CATS)) } else S.cats.delete(k) } else S.cats.add(k);
+  store.set("cats", [...S.cats]); render(); updateDriveTimes(true);
+});
+$("chips").addEventListener("dblclick", (e) => { const b = e.target.closest("[data-cat]"); if (!b) return; S.cats = new Set([b.dataset.cat]); store.set("cats", [...S.cats]); render() });
+$("scroll").addEventListener("click", (e) => {
+  const it = e.target.closest("[data-id]"); if (it) { select(it.dataset.id); return }
+  if (e.target.closest("#btnClose")) { S.view === "settings" ? (S.view = S.selected ? "detail" : "list", render()) : closeDetail(); return }
+  if (e.target.closest("#btnFit")) { fitRoute(); return }
+  const sb = e.target.closest("[data-seg] button"); if (!sb) return;
+  const seg = sb.parentElement.dataset.seg, v = sb.dataset.v;
+  if (seg === "radius") { S.radius = +v; store.set("radius", S.radius); search(S.me || S.origin || map.getCenter()) }
+  if (seg === "car") { S.car = v; store.set("car", v) }
+  if (seg === "planned") { S.showPlanned = v === "true"; store.set("planned", S.showPlanned) }
+  if (seg === "conns") { S.conns.has(v) ? S.conns.delete(v) : S.conns.add(v); store.set("conns", [...S.conns]) }
+  if (seg === "theme") { if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; store.set("theme", v); setTiles() }
+  renderSettings(); render();
+});
+$("scroll").addEventListener("change", (e) => {
+  if (e.target.id === "sortSel") { S.sort = e.target.value; if (S.sort === "drive") updateDriveTimes(true); renderList() }
+  if (e.target.id === "ocmKey") { S.ocmKey = e.target.value.trim(); store.set("ocmKey", S.ocmKey); if (S.origin) search(S.origin, S.ocmKey ? "已加入 Open Charge Map 資料" : null) }
+});
+$("btnSettings").addEventListener("click", () => { S.view = S.view === "settings" ? (S.selected ? "detail" : "list") : "settings"; renderSettings(); render(); $("scroll").scrollTop = 0; if (sheetState === "low") setSheet("mid") });
+$("btnRefresh").addEventListener("click", () => { const c = S.me && S.follow ? S.me : map.getCenter(); search({ lat: c.lat, lng: c.lng }, "已重新整理") });
+$("btnLocate").addEventListener("click", () => {
+  S.follow = true; $("btnLocate").classList.add("follow");
+  if (S.me) { map.setView([S.me.lat, S.me.lng], Math.max(map.getZoom(), 14)); if (hav(S.origin || S.me, S.me) > 500) search(S.me) } else startGPS(true);
+});
+$("btnHere").addEventListener("click", () => { const c = map.getCenter(); search({ lat: c.lat, lng: c.lng }) });
+map.on("dragstart", () => { S.follow = false; $("btnLocate").classList.remove("follow") });
+map.on("moveend", () => {
+  if (!S.origin) return; const c = map.getCenter();
+  $("btnHere").hidden = S.loading || hav(S.origin, { lat: c.lat, lng: c.lng }) < S.radius * 1000 * 0.5;
+});
+
+/* ============ 啟動 ============ */
+(() => { const th = store.get("theme", ""); if (th) { document.documentElement.dataset.theme = th; setTiles() } })();
+setSheet(innerHeight < 640 ? "low" : "mid");
+render();
+startGPS(false);
+loadTesla().then((d) => { teslaAll = d });
+</script>
+</body>
+</html>
