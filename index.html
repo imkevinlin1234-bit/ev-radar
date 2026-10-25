@@ -19,6 +19,8 @@
   --ok: #087F50; --ok-soft: #DDF5E9; --warn: #B45A00; --warn-soft: #FFF1DE; --bad: #C8102E; --bad-soft: #FDE4E8;
   /* 充電站分類色（地圖、清單、圖例共用） */
   --c-tesla: #E31937; --c-ultra: #7C3AED; --c-fast: #EA580C; --c-slow: #16A34A; --c-unk: #6B7280;
+  /* 冰島分頁分類色 */
+  --p-sight: #9333EA; --p-fall: #0284C7; --p-nature: #15803D; --p-hot: #0D9488; --p-view: #4F46E5; --p-market: #EA580C; --p-conv: #B45309; --p-fuel: #475569;
   --shadow: 0 1px 2px rgba(14,17,22,.06), 0 8px 24px rgba(14,17,22,.14);
   --font: "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", system-ui, sans-serif;
   --num: "SF Pro Rounded", ui-rounded, "Segoe UI", system-ui, sans-serif;
@@ -53,10 +55,35 @@ button { font: inherit; color: inherit; cursor: pointer }
 .row { display: flex; gap: 8px; align-items: center }
 .pill { pointer-events: auto; background: var(--surface); border: 0; border-radius: 999px; padding: 7px 12px; box-shadow: var(--shadow);
   font-size: 13px; font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; min-height: 36px }
-.status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start }
+/* 頁籤 */
+.tabs { flex: 1; min-width: 0; padding: 3px; gap: 3px }
+.tabs button { flex: 1; min-width: 0; border: 0; background: transparent; border-radius: 999px; padding: 6px 6px; font-weight: 800; font-size: 13px; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg) }
+/* 狀態列（在下方面板頂端） */
+.status { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 4px; font-size: 12.5px; font-weight: 700; color: var(--ink-3); min-width: 0 }
 .status .live { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none }
 .status.on .live { background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 1.8s infinite }
-.status span.t { overflow: hidden; text-overflow: ellipsis }
+.status span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+/* 冰島分頁 */
+.quick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
+.qbox { border: 0; text-align: left; background: var(--surface); border-radius: 14px; padding: 10px 12px; border-left: 5px solid var(--c); display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--ink) }
+.qbox .ql { font-size: 12px; font-weight: 800; color: var(--c) }
+.qbox b { font-size: 14.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.qbox .qd { font-size: 12.5px; color: var(--ink-3) }
+.st-ok { color: var(--ok); font-weight: 800 } .st-warn { color: var(--warn); font-weight: 800 } .st-bad { color: var(--bad); font-weight: 800 }
+.secr { display: flex; gap: 6px; align-items: center }
+.mini { font: inherit; font-weight: 700; font-size: 12px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px }
+.mini[aria-pressed="true"] { background: var(--ok-soft); color: var(--ok); border-color: var(--ok) }
+.badge.emo { font-size: 20px; font-family: inherit }
+.pin.poi { width: 32px; height: 32px; font-size: 16px; font-family: inherit }
+.cross { width: 28px; height: 28px; position: relative }
+.cross::before, .cross::after { content: ""; position: absolute; background: var(--accent); border-radius: 2px; box-shadow: 0 0 0 2px #fff }
+.cross::before { left: 12px; top: 0; width: 4px; height: 28px } .cross::after { top: 12px; left: 0; width: 28px; height: 4px }
+.kv.today { font-weight: 800 } .kv.today > span:first-child { color: var(--accent) }
+.wiki img { width: calc(100% + 28px); margin: -4px -14px 0; max-height: 220px; object-fit: cover; border-radius: 14px 14px 0 0; display: block }
+.wiki p { margin: 10px 0; font-size: 14px; line-height: 1.6 }
+.wiki a { color: var(--accent) }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent) } 70% { box-shadow: 0 0 0 8px transparent } 100% { box-shadow: 0 0 0 0 transparent } }
 .iconbtn { width: 38px; height: 38px; padding: 0; justify-content: center; font-size: 17px; flex: none }
 .chips { pointer-events: auto; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; margin: 0 -12px; padding-inline: 12px }
@@ -175,7 +202,7 @@ button { font: inherit; color: inherit; cursor: pointer }
 
 <div class="top">
   <div class="row">
-    <div class="pill status" id="status"><i class="live"></i><span class="t" id="statusText">準備定位…</span></div>
+    <div class="pill tabs" role="tablist"><button data-mode="ev" role="tab" aria-selected="true">⚡ 充電站</button><button data-mode="poi" role="tab" aria-selected="false">📍 冰島景點・超商</button></div>
     <button class="pill iconbtn" id="btnRefresh" title="重新搜尋" aria-label="重新搜尋">⟳</button>
     <button class="pill iconbtn" id="btnSettings" title="設定與篩選" aria-label="設定與篩選">⚙︎</button>
   </div>
@@ -187,6 +214,7 @@ button { font: inherit; color: inherit; cursor: pointer }
 
 <section class="sheet" id="sheet">
   <div class="grab" id="grab"></div>
+  <div class="status" id="status"><i class="live"></i><span class="t" id="statusText">準備定位…</span></div>
   <div class="scroll" id="scroll">
     <div id="viewList"></div>
     <div id="viewDetail" hidden></div>
@@ -230,7 +258,7 @@ const S = {
   me: null, heading: null, acc: null, origin: null, radius: store.get("radius", 10),
   cats: new Set(store.get("cats", Object.keys(CATS))), conns: new Set(store.get("conns", [])),
   car: store.get("car", "any"), showPlanned: store.get("planned", false), ocmKey: store.get("ocmKey", ""),
-  stations: [], selected: null, follow: true, loading: false, view: "list", sort: "dist",
+  stations: [], selected: null, follow: true, loading: false, view: "list", sort: "dist", mode: "ev",
   drive: new Map(), lastSearchAt: 0, lastTableAt: 0, lastTableFrom: null, route: null, routeFrom: null,
 };
 const $ = (id) => document.getElementById(id);
@@ -667,6 +695,7 @@ function renderSettings() {
     <p>OpenStreetMap 在部分地區（例如台灣）登錄的汽車充電站不多。到 <a href="https://openchargemap.org/site/profile/applications" target="_blank" rel="noopener">openchargemap.org</a> 免費註冊取得金鑰貼在這裡，會多一個資料來源，並顯示費用與狀態回報。金鑰只存在這支手機。</p></div>`;
 }
 function render() {
+  if (S.mode === "poi") { renderPoi(); return }
   setStatus(); renderChips();
   const list = sorted(visible());
   drawMarkers(list); drawMe();
@@ -687,41 +716,43 @@ function closeDetail() {
   S.selected = null; S.view = "list"; S.route = null; if (routeLine) { map.removeLayer(routeLine); routeLine = null }
   render();
 }
+const curTarget = () => S.mode === "poi" ? P.sel : S.selected;
+const curFrom = () => S.mode === "poi" ? poiRef() : S.me || S.origin;
 async function loadRoute(fit) {
-  const s = S.selected, from = S.me || S.origin; if (!s || !from) return;
+  const s = curTarget(), from = curFrom(); if (!s || !from) return;
   S.routeFrom = { ...from };
   try {
     const j = await fetchJSON(`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${s.lng},${s.lat}?overview=full&geometries=geojson`, {}, 20000);
-    const r = j.routes?.[0]; if (!r || S.selected?.id !== s.id) return;
+    const r = j.routes?.[0]; if (!r || curTarget()?.id !== s.id) return;
     S.route = { id: s.id, t: r.duration, d: r.distance };
     S.drive.set(s.id, { t: r.duration, d: r.distance });
     if (routeLine) map.removeLayer(routeLine);
     routeLine = L.layerGroup([
       L.polyline(r.geometry.coordinates.map(([x, y]) => [y, x]), { color: "#fff", weight: 9, opacity: .9, interactive: false }),
-      L.polyline(r.geometry.coordinates.map(([x, y]) => [y, x]), { color: css(CATS[s.cat].v) || "#2B54FF", weight: 5, opacity: 1, interactive: false }),
+      L.polyline(r.geometry.coordinates.map(([x, y]) => [y, x]), { color: css(S.mode === "poi" ? PCATS[s.cat].v : CATS[s.cat].v) || "#2B54FF", weight: 5, opacity: 1, interactive: false }),
     ]).addTo(map);
     if (fit) fitRoute();
-    if (S.view === "detail") renderDetail();
+    if (S.view === "detail") S.mode === "poi" ? renderPoiDetail() : renderDetail();
   } catch (e) { if (S.view === "detail") { S.route = null; toast("路線計算失敗，仍可直接按導航") } }
 }
 function fitRoute() {
-  const s = S.selected; if (!s) return;
-  const pts = [[s.lat, s.lng]]; if (S.me) pts.push([S.me.lat, S.me.lng]);
+  const s = curTarget(); if (!s) return;
+  const f = curFrom(), pts = [[s.lat, s.lng]]; if (f) pts.push([f.lat, f.lng]);
   if (routeLine) routeLine.eachLayer((l) => pts.push(...l.getLatLngs()));
   map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 130], paddingBottomRight: [40, sheetPx() + 30], maxZoom: 16 });
 }
 // 前 10 站的實際開車時間（OSRM table，一次查完）
 async function updateDriveTimes(force) {
-  const from = S.me || S.origin; if (!from) return;
+  const from = curFrom(); if (!from) return;
   if (!force && Date.now() - S.lastTableAt < 45000 && S.lastTableFrom && hav(S.lastTableFrom, from) < 400) return;
-  const top = withDist(visible()).sort((a, b) => a.d - b.d).slice(0, 10).map((x) => x.s);
+  const top = S.mode === "poi" ? poiItems().slice(0, 10).map((x) => x.p) : withDist(visible()).sort((a, b) => a.d - b.d).slice(0, 10).map((x) => x.s);
   if (!top.length) return;
   S.lastTableAt = Date.now(); S.lastTableFrom = { ...from };
   try {
     const coords = [from, ...top].map((p) => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(";");
     const j = await fetchJSON(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=duration,distance`, {}, 20000);
     top.forEach((s, i) => { const t = j.durations?.[0]?.[i + 1], d = j.distances?.[0]?.[i + 1]; if (t != null) S.drive.set(s.id, { t, d }) });
-    if (S.view === "list") renderList();
+    if (S.view === "list") S.mode === "poi" ? renderPoi() : renderList();
   } catch (e) { console.warn("table", e) }
 }
 
@@ -737,6 +768,7 @@ function startGPS(user) {
 }
 function noGPS(msg) {
   toast(msg, 5000);
+  if (S.mode === "poi") { render(); return }
   if (!S.origin) { const c = map.getCenter(); search({ lat: c.lat, lng: c.lng }) }
   setStatus();
 }
@@ -745,8 +777,16 @@ function onPos(p) {
   const first = !S.me;
   S.me = { lat: p.coords.latitude, lng: p.coords.longitude }; S.acc = p.coords.accuracy;
   if (p.coords.heading != null && !isNaN(p.coords.heading) && (p.coords.speed || 0) > 1) S.heading = p.coords.heading;
+  if (S.mode === "poi" && S.follow && !inIceland(S.me)) { S.follow = false; $("btnLocate").classList.remove("follow"); toast("你目前不在冰島：以地圖中心掃描，拖曳地圖會即時更新", 5000) }
   if (S.follow) map.setView([S.me.lat, S.me.lng], first ? 14 : map.getZoom(), { animate: !first });
   drawMe();
+  if (S.mode === "poi") {  // 冰島分頁：資料在手機裡，跟著你即時重掃
+    if (S.follow && inIceland(S.me)) P.origin = { ...S.me };
+    if (!lastRenderPos || hav(lastRenderPos, S.me) > 8) { lastRenderPos = { ...S.me }; renderSoon() }
+    updateDriveTimes();
+    if (P.sel && S.routeFrom && hav(S.routeFrom, S.me) > 250) loadRoute(false);
+    return;
+  }
   const moved = S.origin ? hav(S.origin, S.me) : Infinity;
   if (!(S.loading && Date.now() - S.lastSearchAt < 40000) && moved > Math.max(800, S.radius * 1000 / 3)) { search(S.me, first ? null : "你移動了，已更新附近充電站"); return }
   // 位置每更新一次：清單距離、方向、排序跟著動（最多每秒一次）
@@ -755,7 +795,7 @@ function onPos(p) {
   if (S.selected && S.routeFrom && hav(S.routeFrom, S.me) > 250) loadRoute(false);
 }
 // 每 5 分鐘自動重抓一次（App 在前景時）
-setInterval(() => { if (document.visibilityState === "visible" && S.origin && Date.now() - S.lastSearchAt > 300000) search(S.me || S.origin) }, 30000);
+setInterval(() => { if (document.visibilityState === "visible" && S.mode === "ev" && S.origin && Date.now() - S.lastSearchAt > 300000) search(S.me || S.origin) }, 30000);
 
 /* ============ 下方面板拖曳 ============ */
 const SNAP = { low: 0.22, mid: 0.45, high: 0.86 };
@@ -764,6 +804,8 @@ const sheetPx = () => innerWidth >= 860 ? 0 : $("sheet").getBoundingClientRect()
 function setSheet(k) {
   sheetState = k; $("sheet").style.setProperty("--h", Math.round(innerHeight * SNAP[k]) + "px");
   $("btnLocate").style.bottom = (innerWidth >= 860 ? 24 : Math.round(innerHeight * SNAP[k]) + 14) + "px";
+  // 面板高度變了，地圖露出的範圍也變了：冰島分頁重新對準掃描中心
+  setTimeout(() => { if (S.mode === "poi" && !(S.follow && inIceland(S.me)) && S.view === "list") { P.origin = poiCenter(); renderSoon() } }, 300);
 }
 (() => {
   const g = $("grab"), sh = $("sheet"); let y0, h0;
@@ -778,15 +820,26 @@ function setSheet(k) {
 addEventListener("resize", () => setSheet(sheetState));
 
 /* ============ 事件 ============ */
+document.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-mode]"); if (b) setMode(b.dataset.mode) });
 $("chips").addEventListener("click", (e) => {
+  const pb = e.target.closest("[data-pcat]");
+  if (pb) { const k = pb.dataset.pcat; if (P.cats.has(k)) { if (P.cats.size === 1) P.cats = new Set(Object.keys(PCATS)); else P.cats.delete(k) } else P.cats.add(k);
+    store.set("pcats", [...P.cats]); render(); updateDriveTimes(true); return }
   const b = e.target.closest("[data-cat]"); if (!b) return; const k = b.dataset.cat;
   if (S.cats.has(k)) { if (S.cats.size === 1) { S.cats = new Set(Object.keys(CATS)) } else S.cats.delete(k) } else S.cats.add(k);
   store.set("cats", [...S.cats]); render(); updateDriveTimes(true);
 });
-$("chips").addEventListener("dblclick", (e) => { const b = e.target.closest("[data-cat]"); if (!b) return; S.cats = new Set([b.dataset.cat]); store.set("cats", [...S.cats]); render() });
+$("chips").addEventListener("dblclick", (e) => {
+  const pb = e.target.closest("[data-pcat]"); if (pb) { P.cats = new Set([pb.dataset.pcat]); store.set("pcats", [...P.cats]); render(); return }
+  const b = e.target.closest("[data-cat]"); if (!b) return; S.cats = new Set([b.dataset.cat]); store.set("cats", [...S.cats]); render() });
 $("scroll").addEventListener("click", (e) => {
+  const pit = e.target.closest("[data-pid]"); if (pit) { selectPoi(pit.dataset.pid); return }
   const it = e.target.closest("[data-id]"); if (it) { select(it.dataset.id); return }
-  if (e.target.closest("#btnClose")) { S.view === "settings" ? (S.view = S.selected ? "detail" : "list", render()) : closeDetail(); return }
+  if (e.target.closest("#btnOpenOnly")) { P.openOnly = !P.openOnly; store.set("popen", P.openOnly); render(); return }
+  if (e.target.closest("#btnClose")) {
+    if (S.view === "settings") { S.view = curTarget() ? "detail" : "list"; render(); return }
+    if (S.mode === "poi") { P.sel = null; S.route = null; S.view = "list"; if (routeLine) { map.removeLayer(routeLine); routeLine = null } P.origin = poiCenter(); render(); return }
+    closeDetail(); return }
   if (e.target.closest("#btnFit")) { fitRoute(); return }
   const sb = e.target.closest("[data-seg] button"); if (!sb) return;
   const seg = sb.parentElement.dataset.seg, v = sb.dataset.v;
@@ -795,29 +848,366 @@ $("scroll").addEventListener("click", (e) => {
   if (seg === "planned") { S.showPlanned = v === "true"; store.set("planned", S.showPlanned) }
   if (seg === "conns") { S.conns.has(v) ? S.conns.delete(v) : S.conns.add(v); store.set("conns", [...S.conns]) }
   if (seg === "theme") { if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; store.set("theme", v); setTiles() }
-  renderSettings(); render();
+  if (seg === "pradius") { P.radius = +v; store.set("pradius", P.radius); S.lastTableAt = 0; updateDriveTimes(true) }
+  if (seg === "popen") { P.openOnly = v === "true"; store.set("popen", P.openOnly) }
+  S.mode === "poi" ? renderPoiSettings() : renderSettings(); render();
 });
 $("scroll").addEventListener("change", (e) => {
+  if (e.target.id === "psortSel") { P.sort = e.target.value; if (P.sort === "drive") updateDriveTimes(true); render() }
   if (e.target.id === "sortSel") { S.sort = e.target.value; if (S.sort === "drive") updateDriveTimes(true); renderList() }
   if (e.target.id === "ocmKey") { S.ocmKey = e.target.value.trim(); store.set("ocmKey", S.ocmKey); if (S.origin) search(S.origin, S.ocmKey ? "已加入 Open Charge Map 資料" : null) }
 });
-$("btnSettings").addEventListener("click", () => { S.view = S.view === "settings" ? (S.selected ? "detail" : "list") : "settings"; renderSettings(); render(); $("scroll").scrollTop = 0; if (sheetState === "low") setSheet("mid") });
-$("btnRefresh").addEventListener("click", () => { const c = S.me && S.follow ? S.me : map.getCenter(); search({ lat: c.lat, lng: c.lng }, "已重新整理") });
+$("btnSettings").addEventListener("click", () => { S.view = S.view === "settings" ? (curTarget() ? "detail" : "list") : "settings"; S.mode === "poi" ? renderPoiSettings() : renderSettings(); render(); $("scroll").scrollTop = 0; if (sheetState === "low") setSheet("mid") });
+$("btnRefresh").addEventListener("click", () => { if (S.mode === "poi") { P.origin = poiCenter(); S.lastTableAt = 0; render(); updateDriveTimes(true); toast("已重新掃描"); return } const c = S.me && S.follow ? S.me : map.getCenter(); search({ lat: c.lat, lng: c.lng }, "已重新整理") });
 $("btnLocate").addEventListener("click", () => {
   S.follow = true; $("btnLocate").classList.add("follow");
-  if (S.me) { map.setView([S.me.lat, S.me.lng], Math.max(map.getZoom(), 14)); if (hav(S.origin || S.me, S.me) > 500) search(S.me) } else startGPS(true);
+  if (S.mode === "poi" && S.me && !inIceland(S.me)) toast("你目前不在冰島，這個分頁只涵蓋冰島", 4000);
+  if (S.mode === "poi" && inIceland(S.me)) { P.origin = { ...S.me }; render() }
+  if (S.me) { map.setView([S.me.lat, S.me.lng], Math.max(map.getZoom(), 14)); if (S.mode === "ev" && hav(S.origin || S.me, S.me) > 500) search(S.me) } else startGPS(true);
 });
 $("btnHere").addEventListener("click", () => { const c = map.getCenter(); search({ lat: c.lat, lng: c.lng }) });
+map.on("zoomend", () => { if (S.mode === "poi") renderSoon() });
 map.on("dragstart", () => { S.follow = false; $("btnLocate").classList.remove("follow") });
 map.on("moveend", () => {
+  if (S.mode === "poi") {  // 冰島分頁：拖曳地圖就即時重掃地圖中心
+    if (!(S.follow && inIceland(S.me)) && S.view === "list") { const c = poiCenter(); if (!P.origin || hav(P.origin, c) > 150) { P.origin = c; renderSoon(); clearTimeout(dT); dT = setTimeout(updateDriveTimes, 1500) } }
+    return;
+  }
   if (!S.origin) return; const c = map.getCenter();
   $("btnHere").hidden = S.loading || hav(S.origin, { lat: c.lat, lng: c.lng }) < S.radius * 1000 * 0.5;
 });
 
+/* ============ 冰島景點・超商分頁 ============ */
+const PCATS = {
+  sight:  { label: "景點・文化", v: "--p-sight", e: "⭐" },
+  fall:   { label: "瀑布", v: "--p-fall", e: "💧" },
+  nature: { label: "自然奇景", v: "--p-nature", e: "🌋" },
+  hot:    { label: "溫泉・泳池", v: "--p-hot", e: "♨️" },
+  view:   { label: "觀景點", v: "--p-view", e: "🔭" },
+  market: { label: "超市", v: "--p-market", e: "🛒" },
+  conv:   { label: "超商", v: "--p-conv", e: "🏪" },
+  fuel:   { label: "加油站", v: "--p-fuel", e: "⛽" },
+};
+const PSUB = { geyser: ["間歇泉", "💨"], volcano: ["火山", "🌋"], glacier: ["冰河", "🧊"], beach: ["海灘", "🏖️"], cave_entrance: ["洞穴", "🕳️"],
+  arch: ["海蝕拱", "🪨"], crater: ["火山口", "🌋"], hot_spring: ["天然溫泉", "♨️"], public_bath: ["溫泉浴場", "♨️"], pool: ["公共泳池（多為溫水）", "🏊"],
+  museum: ["博物館", "🏛️"], gallery: ["美術館", "🖼️"], attraction: ["景點", "⭐"], historic: ["歷史古蹟", "🏰"], waterfall: ["瀑布", "💧"],
+  viewpoint: ["觀景點", "🔭"], supermarket: ["超市", "🛒"], convenience: ["超商・小商店", "🏪"], fuel: ["加油站", "⛽"] };
+const CHAIN = [[/bónus/i, "平價超市（粉紅小豬），通常最便宜，營業時間較短"], [/krónan/i, "大型平價超市"], [/nettó/i, "連鎖超市，部分分店營業較晚"],
+  [/hagkaup/i, "大型超市兼百貨，價格偏高"], [/10-11|10–11/i, "便利商店，價格偏高、營業時間長"], [/kjörbúðin/i, "鄉鎮型小超市"], [/krambúðin/i, "便利型小超市"],
+  [/(^|\s)n1(\s|$)/i, "冰島最大的加油站連鎖，多數附商店、熱食和廁所"], [/olís/i, "加油站連鎖，多數附商店"], [/orkan/i, "平價自助加油站"],
+  [/(^|\s)ób(\s|$)/i, "平價自助加油站"], [/atlantsol/i, "平價自助加油站"]];
+const ICELAND = { s: 63.2, n: 66.7, w: -24.7, e: -13.3 };
+const inIceland = (p) => !!p && p.lat > ICELAND.s && p.lat < ICELAND.n && p.lng > ICELAND.w && p.lng < ICELAND.e;
+const PRADII = [5, 20, 50, 100];
+const P = { data: null, built: "", loading: false, cats: new Set(store.get("pcats", Object.keys(PCATS))), radius: store.get("pradius", 20),
+  openOnly: store.get("popen", false), sort: "dist", origin: null, sel: null };
+const isShop = (p) => p.cat === "market" || p.cat === "conv" || p.cat === "fuel";
+const pEmoji = (p) => (PSUB[p.sub] || [])[1] || PCATS[p.cat].e;
+const pSub = (p) => (PSUB[p.sub] || [p.sub])[0];
+
+async function loadPoi() {
+  if (P.data || P.loading) return; P.loading = true; render();
+  try {
+    const j = await fetchJSON("./data/iceland-poi.json", {}, 30000);
+    P.built = j.built;
+    P.data = j.items.map((o) => ({ id: "P" + o.i, osm: o.i, cat: o.c, sub: o.s, lat: o.la, lng: o.lo, name: o.n, en: o.e, zh: o.z, brand: o.b, oh: o.oh,
+      phone: o.ph, web: o.w, wd: o.wd, wp: o.wp, fee: o.f, charge: o.ch, desc: o.de, access: o.ac, ele: o.ele, op: o.op, addr: o.a, extra: o.x }));
+  } catch (e) { toast("冰島資料讀取失敗：" + e.message, 5000) }
+  P.loading = false; render(); updateDriveTimes(true);
+}
+
+/* 營業時間（OSM opening_hours 常見寫法）；冰島全年用 UTC，沒有日光節約時間 */
+const DAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"], DAY_TW = ["一", "二", "三", "四", "五", "六", "日"];
+const ohCache = new Map();
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MON = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)";
+const MONTH_RULE = new RegExp(`^(${MON}(?:-${MON})?(?:,\\s*${MON}(?:-${MON})?)*):?\\s+(.*)$`);
+// 依「現在的月份」解析：冰島很多地方夏季、冬季時間不同（Jun-Aug ...; Sep-May ...）
+function parseOH(str, month = new Date().getUTCMonth()) {
+  if (!str) return null;
+  const key = month + "|" + str;
+  if (ohCache.has(key)) return ohCache.get(key);
+  let res = null;
+  try {
+    const s = str.trim();
+    if (s === "24/7" || /^Mo-Su 00:00-(24|00):00$/.test(s)) res = { always: true, week: Array.from({ length: 7 }, () => [[0, 1440]]) };
+    else {
+      const week = Array(7).fill(null); let ok = true, offSeason = false;
+      for (let rule of s.split(";")) {
+        rule = rule.trim(); if (!rule || /^(PH|SH|easter)\b/.test(rule)) continue;  // 假日例外先略過
+        if (new RegExp(`^${MON} \\d`).test(rule)) continue;  // 特定日期（Dec 25 off 之類）略過
+        const mr = rule.match(MONTH_RULE);
+        if (mr) {
+          const ms = new Set();
+          for (const part of mr[1].split(",")) {
+            const [a, b] = part.trim().split("-").map((x) => MONTHS.indexOf(x));
+            if (b == null || b < 0) ms.add(a); else for (let i = a; ; i = (i + 1) % 12) { ms.add(i); if (i === b) break }
+          }
+          if (!ms.has(month)) { offSeason = true; continue }
+          rule = mr[2].trim();
+        }
+        if (/^(week|\d{4}\b)/.test(rule)) { ok = false; break }
+        const m = rule.match(/^((?:Mo|Tu|We|Th|Fr|Sa|Su)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?(?:,\s*(?:Mo|Tu|We|Th|Fr|Sa|Su)(?:-(?:Mo|Tu|We|Th|Fr|Sa|Su))?)*)?(?:,\s*PH)?\s*(.*)$/);
+        if (!m) { ok = false; break }
+        let days = [];
+        if (m[1]) for (const part of m[1].split(",")) {
+          const [a, b] = part.trim().split("-").map((d) => DAYS.indexOf(d));
+          if (b == null) days.push(a); else for (let i = a; ; i = (i + 1) % 7) { days.push(i); if (i === b) break }
+        } else days = [0, 1, 2, 3, 4, 5, 6];
+        const rest = m[2].trim();
+        if (rest === "off" || rest === "closed") { days.forEach((d) => week[d] = []); continue }
+        const spans = [];
+        for (const t of rest.split(",")) {
+          const mm = t.trim().match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})\+?$/); if (!mm) { ok = false; break }
+          const a = +mm[1] * 60 + +mm[2]; let b = +mm[3] * 60 + +mm[4]; if (b <= a) b += 1440; spans.push([a, b]);
+        }
+        if (!ok || !spans.length) { ok = false; break }
+        days.forEach((d) => week[d] = spans);
+      }
+      if (ok && week.some((w) => w)) res = { week: week.map((w) => w || []) };
+      else if (ok && offSeason) res = { week: Array.from({ length: 7 }, () => []), offSeason: true };  // 這個月份沒有任何開放時段
+    }
+  } catch { res = null }
+  ohCache.set(key, res); return res;
+}
+const hm = (m) => m === 1440 ? "24:00" : `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+function ohStatus(str, now = new Date()) {
+  const o = parseOH(str, now.getUTCMonth()); if (!o) return null;
+  if (o.always) return { open: true, cls: "ok", text: "24 小時營業", short: "24h" };
+  const d = (now.getUTCDay() + 6) % 7, t = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const cur = [...o.week[d], ...o.week[(d + 6) % 7].filter(([, b]) => b > 1440).map(([a, b]) => [a - 1440, b - 1440])];
+  const hit = cur.find(([a, b]) => t >= a && t < b);
+  if (hit) {
+    const left = hit[1] - t;
+    return left <= 60 ? { open: true, soon: true, cls: "warn", text: `快打烊・${hm(hit[1])} 關`, short: "快打烊" } : { open: true, cls: "ok", text: `營業中・到 ${hm(hit[1])}`, short: "營業中" };
+  }
+  for (let k = 0; k < 7; k++) {
+    const dd = (d + k) % 7, next = o.week[dd].map(([a]) => a).filter((a) => k > 0 || a > t).sort((x, y) => x - y)[0];
+    if (next != null) return { open: false, cls: "bad", text: `已打烊・${k === 0 ? "今天" : k === 1 ? "明天" : "週" + DAY_TW[dd]} ${hm(next)} 開`, short: "已打烊" };
+  }
+  return { open: false, cls: "bad", text: o.offSeason ? "已打烊・這個月不開放" : "已打烊", short: o.offSeason ? "季節休" : "已打烊" };
+}
+
+/* 掃描範圍：在冰島且跟隨定位時以你為中心，否則以地圖中心；距離一律從你量（不在冰島時從地圖中心量） */
+const poiRef = () => inIceland(S.me) ? S.me : P.origin || poiCenter();
+function poiCenter() {
+  if (S.follow && inIceland(S.me)) return { ...S.me };
+  // 地圖露出來那一塊的正中間（手機：上方列和下方面板之間；電腦：左側面板右邊）
+  const wide = innerWidth >= 860, x = wide ? (412 + innerWidth) / 2 : innerWidth / 2, y = wide ? innerHeight / 2 : (110 + innerHeight - sheetPx()) / 2;
+  const c = map.containerPointToLatLng([x, Math.max(120, y)]);
+  return { lat: c.lat, lng: c.lng };
+}
+function poiItems() {
+  if (!P.data) return [];
+  const o = P.origin || poiCenter(), ref = poiRef(), R = P.radius * 1000, now = new Date();
+  const out = [];
+  for (const p of P.data) {
+    if (!P.cats.has(p.cat)) continue;
+    if (Math.abs(p.lat - o.lat) > R / 111000 + .01 && p.id !== P.sel?.id) continue;
+    if (hav(o, p) > R && p.id !== P.sel?.id) continue;
+    const st = p.oh ? ohStatus(p.oh, now) : null;
+    if (P.openOnly && isShop(p) && st && !st.open) continue;
+    out.push({ p, d: hav(ref, p), b: bearing(ref, p), st });
+  }
+  if (P.sort === "drive") out.sort((a, b) => (S.drive.get(a.p.id)?.t ?? 1e9 + a.d) - (S.drive.get(b.p.id)?.t ?? 1e9 + b.d));
+  else out.sort((a, b) => a.d - b.d);
+  return out;
+}
+function nearestOf(test) {
+  if (!P.data) return null; const ref = poiRef(); let best = null;
+  for (const p of P.data) if (test(p)) { const d = hav(ref, p); if (!best || d < best.d) best = { p, d } }
+  if (!best) return null;
+  return { ...best, b: bearing(ref, best.p), st: best.p.oh ? ohStatus(best.p.oh) : null };
+}
+
+const poiLayer = L.layerGroup();
+const poiMarkers = new Map(); let poiCircle;
+let poiCross;
+function drawPoi(list) {
+  // 依目前縮放把太擠的圖釘疏開：同一個 28px 格子只畫最近的那個（選中的一定畫）
+  const keep = new Set(), cells = new Set();
+  for (const { p, st } of list) {
+    if (keep.size >= 250) break;
+    const pt = map.latLngToContainerPoint([p.lat, p.lng]), cell = Math.floor(pt.x / 28) + ":" + Math.floor(pt.y / 28);
+    if (cells.has(cell) && P.sel?.id !== p.id) continue;
+    cells.add(cell); keep.add(p.id);
+    const cls = ["pin", "poi", st && !st.open ? "dim" : "", P.sel?.id === p.id ? "sel" : ""].join(" ");
+    const icon = L.divIcon({ html: `<div class="${cls}" style="--c:var(${PCATS[p.cat].v})">${pEmoji(p)}</div>`, className: "", iconSize: [32, 32], iconAnchor: [16, 16] });
+    let m = poiMarkers.get(p.id);
+    if (!m) { m = L.marker([p.lat, p.lng], { icon, riseOnHover: true }).on("click", () => selectPoi(p.id)); m.addTo(poiLayer); poiMarkers.set(p.id, m) }
+    else m.setIcon(icon);
+    m.setZIndexOffset(P.sel?.id === p.id ? 2000 : isShop(p) ? 300 : 0);
+  }
+  for (const [id, m] of poiMarkers) if (!keep.has(id)) { poiLayer.removeLayer(m); poiMarkers.delete(id) }
+  const o = P.origin;
+  if (o) {
+    if (!poiCircle) poiCircle = L.circle([o.lat, o.lng], { radius: P.radius * 1000, color: css("--accent"), weight: 1, opacity: .35, fillOpacity: .03, interactive: false }).addTo(poiLayer);
+    else { poiCircle.setLatLng([o.lat, o.lng]); poiCircle.setRadius(P.radius * 1000) }
+    // 掃描中心十字（以地圖中心掃描時才顯示）
+    const byCenter = !(S.follow && inIceland(S.me));
+    if (!poiCross) poiCross = L.marker([o.lat, o.lng], { icon: L.divIcon({ html: '<div class="cross"></div>', className: "", iconSize: [28, 28], iconAnchor: [14, 14] }), interactive: false, zIndexOffset: 2500 });
+    poiCross.setLatLng([o.lat, o.lng]);
+    if (byCenter && !poiLayer.hasLayer(poiCross)) poiCross.addTo(poiLayer); else if (!byCenter && poiLayer.hasLayer(poiCross)) poiLayer.removeLayer(poiCross);
+  }
+}
+function poiStatus(n) {
+  const el = $("status"), t = $("statusText");
+  el.querySelector(".live").className = "live";
+  const live = S.follow && inIceland(S.me);
+  el.classList.toggle("on", live);
+  t.innerHTML = P.loading ? "讀取冰島資料…" : `${live ? `即時定位${S.acc ? ` ±${Math.round(S.acc)}m` : ""}` : inIceland(S.me) ? "掃描地圖中心（按 ◎ 回到你）" : "你不在冰島・掃描地圖中心"} · <span class="n">${n}</span> 處 · <span class="n">${P.radius}</span> km`;
+}
+function poiChips() {
+  const counts = {};
+  if (P.data) { const o = P.origin || poiCenter(), R = P.radius * 1000; for (const p of P.data) if (Math.abs(p.lat - o.lat) < R / 111000 + .01 && hav(o, p) <= R) counts[p.cat] = (counts[p.cat] || 0) + 1 }
+  $("chips").innerHTML = Object.entries(PCATS).map(([k, c]) =>
+    `<button class="chip" data-pcat="${k}" aria-pressed="${P.cats.has(k)}" style="--c:var(${c.v})"><i></i>${c.e} ${c.label}<span class="cnt n">${counts[k] || 0}</span></button>`).join("");
+}
+const stTag = (st) => st ? `<span class="tag ${st.cls}">${st.short}</span>` : "";
+const pBadge = (p) => `<div class="badge emo" style="--c:var(${PCATS[p.cat].v})">${pEmoji(p)}</div>`;
+const nowIS = () => { const d = new Date(); return hm(d.getUTCHours() * 60 + d.getUTCMinutes()) };
+function renderPoiList(list) {
+  if (P.loading || !P.data) { $("viewList").innerHTML = `<div class="empty"><span class="spin" style="display:inline-block;vertical-align:middle"></span> 正在讀取冰島景點與商店資料…</div>`; return }
+  let h = "";
+  if (!inIceland(S.me)) h += `<p class="note" style="margin-top:4px">📍 你目前不在冰島：以地圖中心掃描，拖曳地圖清單會即時更新。到冰島開啟定位後會自動以你為中心。</p>`;
+  const quick = [["market", "最近超市", (p) => p.cat === "market"], ["conv", "最近超商", (p) => p.cat === "conv"],
+    ["fuel", "最近加油站", (p) => p.cat === "fuel"], ["sight", "最近景點", (p) => !isShop(p)]];
+  h += `<div class="sec"><span>離${inIceland(S.me) ? "你" : "地圖中心"}最近的</span><span>冰島時間 <span class="n">${nowIS()}</span></span></div><div class="quick">`;
+  for (const [cat, lab, test] of quick) {
+    const q = nearestOf(test);
+    h += q ? `<button class="qbox" data-pid="${q.p.id}" style="--c:var(${PCATS[q.p.cat].v})"><span class="ql">${pEmoji(q.p)} ${lab}</span><b>${esc(q.p.name)}</b>
+      <span class="qd"><span class="n">${fmtDist(q.d)}</span> ${arrowHTML(q.b)}${q.st ? ` · <span class="st-${q.st.cls}">${q.st.short}</span>` : ""}</span></button>`
+      : `<div class="qbox" style="--c:var(${PCATS[cat].v})"><span class="ql">${lab}</span><b>—</b></div>`;
+  }
+  h += `</div><div class="sec"><span>${P.radius} km 內 <span class="n">${list.length}</span> 處</span><span class="secr">
+    <button class="mini" id="btnOpenOnly" aria-pressed="${P.openOnly}">只看營業中</button>
+    <select id="psortSel" aria-label="排序"><option value="dist"${P.sort === "dist" ? " selected" : ""}>依距離</option><option value="drive"${P.sort === "drive" ? " selected" : ""}>依開車時間</option></select></span></div>`;
+  if (!list.length) h += `<div class="empty">範圍內沒有符合的地點<br><small>拖曳地圖、把範圍調大，或在上方打開更多分類</small></div>`;
+  h += `<div class="list">`;
+  for (const { p, d, b, st } of list.slice(0, 150)) {
+    const dv = S.drive.get(p.id);
+    const sub = stTag(st) + esc([pSub(p), p.en, p.brand && p.brand !== p.name ? p.brand : ""].filter(Boolean).join(" · "));
+    h += `<button class="item${st && !st.open ? " dim" : ""}" data-pid="${p.id}">${pBadge(p)}
+      <div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="sub">${sub}</div></div>
+      <div class="r"><b class="n">${fmtDist(d)}</b>${dv ? `🚗 ${fmtMin(dv.t)}` : `${arrowHTML(b)} ${dirName(b)}`}</div></button>`;
+  }
+  h += `</div><p class="note">● 顏色：${Object.values(PCATS).map((c) => `<b style="color:var(${c.v})">${c.e}${c.label}</b>`).join("、")}。變淡＝現在沒營業。<br>
+  資料來自 <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a>（${esc(P.built)} 下載，存在 App 裡）；營業時間以冰島時間（UTC）計算，假日、冬季可能不同，出發前用 Google 地圖再確認。</p>`;
+  $("viewList").innerHTML = h;
+}
+function weekTable(o) {
+  const today = (new Date().getUTCDay() + 6) % 7;
+  return o.week.map((w, i) => `<div class="kv${i === today ? " today" : ""}"><span>星期${DAY_TW[i]}${i === today ? "・今天" : ""}</span><span class="n">${w.length ? w.map(([a, b]) => `${hm(a)}–${b === 1440 ? "24:00" : hm(b)}`).join("、") : "休息"}</span></div>`).join("");
+}
+function renderPoiDetail() {
+  const p = P.sel; if (!p) return;
+  const ref = poiRef(), d = hav(ref, p), b = bearing(ref, p), st = p.oh ? ohStatus(p.oh) : null;
+  const route = S.route && S.route.id === p.id ? S.route : null, chain = CHAIN.find(([re]) => re.test(`${p.brand || ""} ${p.name}`));
+  const o = p.oh ? parseOH(p.oh) : null, ele = p.ele && isFinite(parseFloat(p.ele)) ? Math.round(parseFloat(p.ele)) + " m" : "";
+  let h = `<div class="dhead" style="--c:var(${PCATS[p.cat].v})"><button class="x" id="btnClose" aria-label="關閉">✕</button>
+    <div class="k">${pEmoji(p)} ${esc(pSub(p))}</div>
+    <h2>${esc(p.name)}</h2><div class="addr">${esc([p.zh, p.en].filter(Boolean).join(" · "))}${p.addr ? `${p.zh || p.en ? "<br>" : ""}${esc(p.addr)}` : ""}</div></div>
+  <div class="stats">
+    <div class="stat"><b class="n">${fmtDist(d)}</b><span>${arrowHTML(b)} 往${dirName(b)}</span></div>
+    <div class="stat"><b class="n">${route ? fmtMin(route.t) : "…"}</b><span>${route ? "開車 " + fmtDist(route.d) : "路線計算中"}</span></div>
+    <div class="stat"><b class="${st ? "st-" + st.cls : "n"}">${st ? st.short : ele || "—"}</b><span>${st ? (st.text.split("・")[1] || "營業時間") : ele ? "海拔" : "營業時間未登錄"}</span></div>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving" target="_blank" rel="noopener">➤ Google 地圖導航</a>
+    <a class="btn" href="https://maps.apple.com/?daddr=${p.lat},${p.lng}&dirflg=d" target="_blank" rel="noopener">Apple 地圖</a>
+    <button class="btn" id="btnFit">看整條路線</button>
+  </div>`;
+  if (chain) h += `<p class="note" style="margin-top:10px">🏷️ ${esc(chain[1])}</p>`;
+  h += `<div id="wiki"></div>`;
+  if (p.oh) h += `<div class="sec"><span>營業時間（冰島時間）</span><span>${st ? `<span class="st-${st.cls}">${esc(st.text)}</span>` : ""}</span></div><div class="card">${o ? weekTable(o) + (new RegExp(MON).test(p.oh) ? kv("全年寫法", esc(p.oh)) : "") : kv("原始資料", esc(p.oh))}</div>`;
+  const fee = p.fee === "no" ? "免費" : p.fee === "yes" ? "收費" : p.fee || "";
+  const info = [
+    kv("品牌", esc(p.brand)), kv("營運", esc(p.op)), kv("地址", esc(p.addr)),
+    kv("門票／費用", esc([fee, p.charge].filter(Boolean).join(" · "))), kv("附設", esc(p.extra)),
+    kv("開放", esc({ yes: "公眾", permissive: "開放進入", private: "私人", customers: "限顧客", no: "不開放" }[p.access] || p.access || "")),
+    kv("海拔", esc(ele)), kv("說明", esc(p.desc)),
+    kv("電話", p.phone ? `<a href="tel:${esc(p.phone.split(";")[0])}">${esc(p.phone)}</a>` : ""),
+    kv("網站", p.web ? link(p.web, p.web.replace(/^https?:\/\//, "")) : ""),
+    kv("座標", `<span class="n">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span>`),
+  ].join("");
+  h += `<div class="sec"><span>地點資訊</span></div><div class="card">${info}</div>`;
+  const ty = { n: "node", w: "way", r: "relation" }[p.osm[0]];
+  h += `<p class="note">更多資訊：${link(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + " " + p.lat.toFixed(4) + "," + p.lng.toFixed(4))}`, "Google 地圖（照片、評論）")}、${link(`https://www.openstreetmap.org/${ty}/${p.osm.slice(1)}`, "OpenStreetMap")}</p>`;
+  $("viewDetail").innerHTML = h;
+  loadWiki(p);
+}
+const wikiCache = new Map();
+async function loadWiki(p) {
+  if (!p.wd && !/^(en|zh):/.test(p.wp || "")) return;
+  let res = wikiCache.get(p.id);
+  if (res === undefined) {
+    res = null;
+    try {
+      let lang, title;
+      if (p.wd) {
+        const j = await fetchJSON(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(p.wd)}&props=sitelinks&sitefilter=zhwiki|enwiki&format=json&origin=*`, {}, 15000);
+        const sl = j.entities?.[p.wd]?.sitelinks || {};
+        if (sl.zhwiki) { lang = "zh"; title = sl.zhwiki.title } else if (sl.enwiki) { lang = "en"; title = sl.enwiki.title }
+      }
+      if (!title) { const m = (p.wp || "").match(/^(en|zh):(.+)$/); if (m) { lang = m[1]; title = m[2] } }
+      if (title) {
+        const s = await fetchJSON(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, lang === "zh" ? { headers: { "Accept-Language": "zh-tw" } } : {}, 15000);
+        if (s.extract) res = { lang, title: s.title || title, extract: s.extract, img: s.thumbnail?.source, url: s.content_urls?.mobile?.page };
+      }
+    } catch (e) { console.warn("wiki", e) }
+    wikiCache.set(p.id, res);
+  }
+  const el = $("wiki"); if (!res || !el || P.sel?.id !== p.id) return;
+  el.innerHTML = `<div class="sec"><span>介紹</span><span>維基百科（${res.lang === "zh" ? "中文" : "英文"}）</span></div><div class="card wiki">
+    ${res.img ? `<img src="${esc(res.img)}" alt="${esc(res.title)}" loading="lazy">` : ""}<p>${esc(res.extract)}</p>${res.url ? `<p>${link(res.url, "閱讀全文 →")}</p>` : ""}</div>`;
+}
+function renderPoi() {
+  const list = poiItems();
+  poiStatus(list.length); poiChips(); drawPoi(list); drawMe();
+  $("viewList").hidden = S.view !== "list"; $("viewDetail").hidden = S.view !== "detail"; $("viewSettings").hidden = S.view !== "settings";
+  if (S.view === "list") renderPoiList(list);
+}
+function selectPoi(id) {
+  const p = P.data?.find((x) => x.id === id); if (!p) return;
+  P.sel = p; S.route = null; S.view = "detail"; S.follow = false; $("btnLocate").classList.remove("follow");
+  $("scroll").scrollTop = 0; setSheet("mid"); renderPoiDetail(); renderPoi();
+  map.panTo([p.lat, p.lng], { animate: true });
+  loadRoute(true);
+}
+function renderPoiSettings() {
+  const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" aria-pressed="${String(cur) === String(v)}">${l}</button>`).join("")}</div>`;
+  $("viewSettings").innerHTML = `<div class="dhead" style="--c:var(--ink)"><button class="x" id="btnClose" aria-label="關閉">✕</button><div class="k">設定與篩選</div><h2>冰島景點・超商</h2></div>
+  <div class="panel"><h3>掃描範圍</h3>${seg("pradius", PRADII.map((r) => [r, r + " km"]), P.radius)}<p>冰島鄉間商店很少，開環島公路建議 50 km 以上。</p></div>
+  <div class="panel"><h3>超市・超商・加油站</h3>${seg("popen", [[false, "全部顯示"], [true, "只看營業中"]], P.openOnly)}<p>沒登錄營業時間的店會一直顯示。</p></div>
+  <div class="panel"><h3>外觀</h3>${seg("theme", [["", "跟系統"], ["light", "淺色"], ["dark", "深色"]], document.documentElement.dataset.theme || "")}</div>
+  <div class="panel"><h3>資料</h3><p>共 ${P.data ? P.data.length : "—"} 個地點（景點、瀑布、溫泉、觀景點、超市、超商、加油站），${esc(P.built)} 從 OpenStreetMap 下載，存在 App 裡。</p></div>`;
+}
+function setMode(m, quiet) {
+  if (S.mode === m && !quiet) return;
+  S.mode = m; store.set("mode", m);
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.mode === m)));
+  S.view = "list"; S.selected = null; P.sel = null; S.route = null; S.lastTableAt = 0;
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null }
+  if (m === "poi") {
+    map.removeLayer(layer); if (radiusCircle) map.removeLayer(radiusCircle); poiLayer.addTo(map); $("btnHere").hidden = true;
+    if (!inIceland(S.me)) {
+      if (!inIceland(map.getCenter())) map.setView([64.1466, -21.9426], 11, { animate: false });
+      if (S.me) { S.follow = false; $("btnLocate").classList.remove("follow"); if (!quiet) toast("你目前不在冰島：以地圖中心掃描，拖曳地圖會即時更新", 5000) }
+    }
+    P.origin = poiCenter(); loadPoi();
+  } else {
+    map.removeLayer(poiLayer); layer.addTo(map); if (radiusCircle) radiusCircle.addTo(map);
+    const c = S.follow && S.me ? S.me : map.getCenter();
+    if (!S.origin || hav(S.origin, c) > S.radius * 1000 / 3) search({ lat: c.lat, lng: c.lng });
+  }
+  render(); $("scroll").scrollTop = 0; updateDriveTimes(true);
+}
+
+let dT;
 /* ============ 啟動 ============ */
 (() => { const th = store.get("theme", ""); if (th) { document.documentElement.dataset.theme = th; setTiles() } })();
 setSheet(innerHeight < 640 ? "low" : "mid");
-render();
+if (store.get("mode", "ev") === "poi") setMode("poi", true); else render();
 startGPS(false);
 loadTesla().then((d) => { teslaAll = d });
 </script>
